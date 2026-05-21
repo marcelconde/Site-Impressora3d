@@ -1,6 +1,6 @@
 /* ── CONFIG ─────────────────────────────────────────────── */
 const CONFIG = {
-    password: 'print3d2024',
+    passwordHash: '9a746577e31a49afb2e11da31af438be9cec053a39e8db95bf4494a3672fcf8f',
     cloudName: 'das730gjc',
     uploadPreset: 'print3d_upload',
     storageKey: 'print3d_products',
@@ -68,9 +68,10 @@ togglePw.addEventListener('click', () => {
     togglePw.textContent = loginPw.type === 'password' ? '👁' : '🙈';
 });
 
-loginForm.addEventListener('submit', e => {
+loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    if (loginPw.value === CONFIG.password) {
+    const hash = await sha256(loginPw.value);
+    if (hash === CONFIG.passwordHash) {
         sessionStorage.setItem('print3d_auth', '1');
         loginError.textContent = '';
         showPanel();
@@ -80,6 +81,11 @@ loginForm.addEventListener('submit', e => {
         loginPw.focus();
     }
 });
+
+async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 logoutBtn.addEventListener('click', showLogin);
 
