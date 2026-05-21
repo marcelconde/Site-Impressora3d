@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Print3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+    <!-- ── LOGIN ─────────────────────────────────── -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <div class="login-logo">
+                <svg viewBox="0 0 44 44" width="48" height="48"><polygon points="22,3 40,12.5 40,31.5 22,41 4,31.5 4,12.5" fill="none" stroke="url(#lg)" stroke-width="2"/><polygon points="22,12 32,17.5 32,26.5 22,32 12,26.5 12,17.5" fill="url(#lg)" opacity=".25"/><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient></defs></svg>
+                <div>
+                    <span class="logo-main">PRINT<span class="logo-accent">3D</span></span>
+                    <span class="login-sub">Painel Administrativo</span>
+                </div>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginPassword">Senha de acesso</label>
+                    <div class="password-wrap">
+                        <input type="password" id="loginPassword" placeholder="Digite sua senha" autocomplete="current-password" required>
+                        <button type="button" class="toggle-pw" id="togglePw">👁</button>
+                    </div>
+                    <span class="login-error" id="loginError"></span>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── PAINEL PRINCIPAL ───────────────────────── -->
+    <div class="admin-wrap hidden" id="adminPanel">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <svg viewBox="0 0 44 44" width="36" height="36"><polygon points="22,3 40,12.5 40,31.5 22,41 4,31.5 4,12.5" fill="none" stroke="url(#tg)" stroke-width="2"/><polygon points="22,12 32,17.5 32,26.5 22,32 12,26.5 12,17.5" fill="url(#tg)" opacity=".25"/><defs><linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient></defs></svg>
+                <div>
+                    <span class="logo-main">PRINT<span class="logo-accent">3D</span></span>
+                    <span class="topbar-sub">Admin</span>
+                </div>
+            </div>
+            <div class="topbar-stats">
+                <div class="tstat"><strong id="statTotal">0</strong><span>Produtos</span></div>
+                <div class="tstat-div"></div>
+                <div class="tstat"><strong id="statCats">0</strong><span>Categorias</span></div>
+                <div class="tstat-div"></div>
+                <div class="tstat"><strong id="statPhotos">0</strong><span>Com foto</span></div>
+            </div>
+            <div class="topbar-right">
+                <a href="../index.html" class="btn btn-outline btn-sm" target="_blank">↗ Ver site</a>
+                <button class="btn btn-ghost btn-sm" id="logoutBtn">Sair</button>
+            </div>
+        </header>
+
+        <!-- ── NAV TABS ──────────────────────────────────── -->
+        <nav class="admin-nav" id="adminNav">
+            <button class="admin-nav-tab active" data-view="catalog">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                Catálogo
+            </button>
+            <button class="admin-nav-tab" data-view="calc">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="11" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="11" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
+                Calculadora de Custo
+            </button>
+        </nav>
+
+        <!-- Content -->
+        <main class="admin-content">
+
+            <!-- ── CATÁLOGO VIEW ──────────────────────────── -->
+            <div id="catalogView">
+            <div class="content-header">
+                <div>
+                    <h1>Catálogo de Produtos</h1>
+                    <p id="contentSubtitle">Gerencie todos os produtos da loja</p>
+                </div>
+                <button class="btn btn-primary" id="addProductBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Novo Produto
+                </button>
+            </div>
+
+            <!-- Category tabs -->
+            <div class="cat-tabs" id="catTabs">
+                <button class="cat-tab active" data-cat="all">Todos</button>
+                <button class="cat-tab" data-cat="geek">Geek</button>
+                <button class="cat-tab" data-cat="decoracao">Decoração</button>
+                <button class="cat-tab" data-cat="ferramentas">Ferramentas</button>
+                <button class="cat-tab" data-cat="organizacao">Organização</button>
+                <button class="cat-tab" data-cat="gadgets">Gadgets</button>
+                <button class="cat-tab" data-cat="personalizados">Personalizados</button>
+            </div>
+
+            <!-- Grid -->
+            <div class="admin-grid" id="adminGrid"></div>
+
+            <!-- Empty state -->
+            <div class="empty-state hidden" id="emptyState">
+                <span>📦</span>
+                <p>Nenhum produto nesta categoria ainda</p>
+                <button class="btn btn-primary" id="addFromEmpty">+ Adicionar produto</button>
+            </div>
+            </div><!-- /catalogView -->
+
+            <!-- ── CALCULADORA VIEW ───────────────────────── -->
+            <div id="calcView" class="hidden">
+                <div class="content-header">
+                    <div>
+                        <h1>Calculadora de Custo</h1>
+                        <p>Estime o custo de impressão antes de precificar o produto</p>
+                    </div>
+                </div>
+
+                <div class="calc-layout">
+
+                    <!-- Coluna esquerda: inputs -->
+                    <div class="calc-inputs-col">
+
+                        <!-- Material -->
+                        <div class="calc-card">
+                            <h3 class="calc-card-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                                Material
+                            </h3>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="cMaterial">Tipo de material</label>
+                                    <select id="cMaterial">
+                                        <option value="pla">PLA</option>
+                                        <option value="petg">PETG</option>
+                                        <option value="abs">ABS</option>
+                                        <option value="tpu">TPU (Flexível)</option>
+                                        <option value="asa">ASA</option>
+                                        <option value="resina">Resina</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cPriceKg" id="cPriceLbl">Preço por kg</label>
+                                    <div class="calc-affix">
+                                        <span class="affix-pre">R$</span>
+                                        <input type="number" id="cPriceKg" min="0" step="0.01" value="90.00">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="cQty" id="cQtyLbl">Quantidade usada (g)</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="cQty" min="0" step="1" placeholder="0">
+                                    <span class="affix-suf" id="cQtySuf">g</span>
+                                </div>
+                                <span class="field-hint" id="cQtyHint">Peso do filamento que será usado na impressão</span>
+                            </div>
+                        </div>
+
+                        <!-- Energia -->
+                        <div class="calc-card">
+                            <h3 class="calc-card-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                Energia elétrica
+                            </h3>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="cHours">Horas</label>
+                                    <input type="number" id="cHours" min="0" max="999" step="1" placeholder="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="cMins">Minutos</label>
+                                    <input type="number" id="cMins" min="0" max="59" step="1" placeholder="0">
+                                </div>
+                            </div>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="cWatts">Consumo da impressora</label>
+                                    <div class="calc-affix">
+                                        <input type="number" id="cWatts" min="0" step="10" value="150">
+                                        <span class="affix-suf">W</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cKwh">Preço do kWh</label>
+                                    <div class="calc-affix">
+                                        <span class="affix-pre">R$</span>
+                                        <input type="number" id="cKwh" min="0" step="0.01" value="0.90">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Taxa de erro -->
+                        <div class="calc-card">
+                            <h3 class="calc-card-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Taxa de erro / falha
+                            </h3>
+                            <div class="form-group">
+                                <label>Percentual estimado de falhas</label>
+                                <div class="error-rate-row">
+                                    <input type="range" id="cErrorRange" min="0" max="50" step="1" value="10" class="error-slider">
+                                    <div class="calc-affix error-num">
+                                        <input type="number" id="cError" min="0" max="100" step="1" value="10">
+                                        <span class="affix-suf">%</span>
+                                    </div>
+                                </div>
+                                <span class="field-hint">Material e tempo perdido em impressões com falha</span>
+                            </div>
+                        </div>
+
+                    </div><!-- /calc-inputs-col -->
+
+                    <!-- Coluna direita: resultado -->
+                    <div class="calc-result-col">
+                        <div class="calc-result">
+                            <h3 class="calc-card-title">Resultado</h3>
+
+                            <div class="result-lines">
+                                <div class="result-line">
+                                    <span>Custo do material</span>
+                                    <strong id="rMaterial">R$ 0,00</strong>
+                                </div>
+                                <div class="result-line">
+                                    <span>Custo de energia</span>
+                                    <strong id="rEnergy">R$ 0,00</strong>
+                                </div>
+                                <div class="result-sep"></div>
+                                <div class="result-line result-sub-line">
+                                    <span>Subtotal</span>
+                                    <strong id="rSub">R$ 0,00</strong>
+                                </div>
+                                <div class="result-line">
+                                    <span id="rErrorLbl">+ Margem de erro (10%)</span>
+                                    <strong id="rError">R$ 0,00</strong>
+                                </div>
+                            </div>
+
+                            <div class="result-total">
+                                <span>Custo total</span>
+                                <strong id="rTotal">R$ 0,00</strong>
+                            </div>
+
+                            <div class="result-markup">
+                                <p class="markup-title">Sugestão de preço de venda</p>
+                                <div class="markup-grid">
+                                    <div class="markup-item">
+                                        <span>Lucro 50%</span>
+                                        <strong id="m50">R$ 0,00</strong>
+                                    </div>
+                                    <div class="markup-item">
+                                        <span>Lucro 100%</span>
+                                        <strong id="m100">R$ 0,00</strong>
+                                    </div>
+                                    <div class="markup-item">
+                                        <span>Lucro 150%</span>
+                                        <strong id="m150">R$ 0,00</strong>
+                                    </div>
+                                    <div class="markup-item markup-highlight">
+                                        <span>Lucro 200%</span>
+                                        <strong id="m200">R$ 0,00</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /calc-result-col -->
+
+                </div><!-- /calc-layout -->
+            </div><!-- /calcView -->
+
+        </main>
+    </div>
+
+    <!-- ── MODAL ADD/EDIT ─────────────────────────── -->
+    <div class="modal-overlay hidden" id="productModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2 id="modalTitle">Novo Produto</h2>
+                <button class="modal-close" id="modalClose" aria-label="Fechar">✕</button>
+            </div>
+
+            <form id="productForm" novalidate>
+                <input type="hidden" id="editId">
+
+                <div class="form-grid">
+                    <!-- Coluna esquerda — imagem -->
+                    <div class="form-col">
+                        <label class="field-label">Foto do produto</label>
+                        <div class="image-upload-box" id="imageUploadBox">
+                            <div class="upload-ph" id="uploadPh">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+                                <p>Clique para selecionar</p>
+                                <span>JPG, PNG ou WebP</span>
+                            </div>
+                            <img id="uploadPreview" class="upload-preview hidden" alt="Preview">
+                            <input type="file" id="imageFile" accept="image/jpeg,image/png,image/webp" hidden>
+                        </div>
+
+                        <!-- Upload progress -->
+                        <div class="upload-progress-wrap hidden" id="uploadProgressWrap">
+                            <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                            <span id="uploadProgressText">Enviando para Cloudinary…</span>
+                        </div>
+
+                        <p class="field-hint">— ou cole o caminho do Cloudinary —</p>
+                        <input type="text" id="imagePublicId" placeholder="Ex: Geek/Pikachu/capa" class="input-full">
+                        <span class="field-hint">Pasta relativa a <code>Produtos/</code></span>
+                    </div>
+
+                    <!-- Coluna direita — dados -->
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="fName">Nome do produto *</label>
+                            <input type="text" id="fName" required placeholder="Ex: Pikachu">
+                            <span class="form-err" id="fNameErr"></span>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="fCategory">Categoria *</label>
+                                <select id="fCategory" required>
+                                    <option value="">Selecione…</option>
+                                    <option value="geek">Geek</option>
+                                    <option value="decoracao">Decoração</option>
+                                    <option value="ferramentas">Ferramentas</option>
+                                    <option value="organizacao">Organização</option>
+                                    <option value="gadgets">Gadgets</option>
+                                    <option value="personalizados">Personalizados</option>
+                                </select>
+                                <span class="form-err" id="fCategoryErr"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="fPrice">Preço (R$)</label>
+                                <input type="number" id="fPrice" min="0" step="0.01" placeholder="Deixe vazio = Consultar">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fDesc">Descrição *</label>
+                            <textarea id="fDesc" rows="4" required placeholder="Descreva o produto, material, tamanhos disponíveis…"></textarea>
+                            <span class="form-err" id="fDescErr"></span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Cores disponíveis</label>
+                            <div class="colors-wrap">
+                                <input type="text" id="colorInput" placeholder="Digite uma cor e pressione Enter">
+                                <div class="color-tags" id="colorTags"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="fEmoji">Emoji</label>
+                                <input type="text" id="fEmoji" placeholder="🎮" maxlength="4">
+                            </div>
+                            <div class="form-group">
+                                <label for="fBadge">Badge</label>
+                                <input type="text" id="fBadge" placeholder="Ex: Novo, Destaque">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="cancelBtn">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        Salvar produto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── CONFIRMAR EXCLUSÃO ─────────────────────── -->
+    <div class="confirm-overlay hidden" id="confirmOverlay">
+        <div class="confirm-box">
+            <div class="confirm-icon">🗑️</div>
+            <h3>Excluir produto?</h3>
+            <p id="confirmMsg">Esta ação não pode ser desfeita.</p>
+            <div class="confirm-btns">
+                <button class="btn btn-outline" id="cancelDelete">Cancelar</button>
+                <button class="btn btn-danger" id="doDelete">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── TOAST ──────────────────────────────────── -->
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
