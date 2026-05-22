@@ -165,6 +165,78 @@ logoutBtn.addEventListener('click', async () => {
     showLogin();
 });
 
+// Handle invite link (?invite=TOKEN)
+const inviteToken = new URLSearchParams(window.location.search).get('invite');
+if (inviteToken) {
+    loginForm.classList.add('hidden');
+    forgotForm.classList.add('hidden');
+
+    const inviteAcceptDiv = document.createElement('div');
+    inviteAcceptDiv.id = 'inviteAcceptForm';
+    inviteAcceptDiv.innerHTML = `
+        <p id="inviteWelcome" style="text-align:center;color:var(--text2);margin-bottom:16px;font-size:.9rem">Verificando convite...</p>
+        <div class="form-group">
+            <label for="inviteName">Seu nome</label>
+            <input type="text" id="inviteName" placeholder="Como você quer ser chamado" required>
+        </div>
+        <div class="form-group">
+            <label for="inviteNewPw">Criar senha</label>
+            <input type="password" id="inviteNewPw" placeholder="Mínimo 6 caracteres" required>
+        </div>
+        <div class="form-group">
+            <label for="inviteNewPw2">Confirmar senha</label>
+            <input type="password" id="inviteNewPw2" placeholder="Repita a senha" required>
+        </div>
+        <span class="login-error" id="inviteAcceptMsg"></span>
+        <button type="button" class="btn btn-primary btn-full" id="inviteAcceptBtn">Ativar minha conta</button>`;
+    loginScreen.querySelector('.login-box').appendChild(inviteAcceptDiv);
+
+    // Verify token
+    fetch(CONFIG.workerUrl + '/auth/invite?token=' + inviteToken)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('inviteWelcome').textContent = data.error;
+                document.getElementById('inviteAcceptBtn').disabled = true;
+            } else {
+                document.getElementById('inviteWelcome').textContent = `Convite para ${data.email} — crie sua senha de acesso.`;
+            }
+        }).catch(() => {
+            document.getElementById('inviteWelcome').textContent = 'Erro ao verificar convite.';
+        });
+
+    document.getElementById('inviteAcceptBtn').addEventListener('click', async () => {
+        const name = document.getElementById('inviteName').value.trim();
+        const pw   = document.getElementById('inviteNewPw').value;
+        const pw2  = document.getElementById('inviteNewPw2').value;
+        const msg  = document.getElementById('inviteAcceptMsg');
+        if (!name) { msg.textContent = 'Digite seu nome.'; return; }
+        if (pw !== pw2) { msg.textContent = 'As senhas não coincidem.'; return; }
+        if (pw.length < 6) { msg.textContent = 'Senha deve ter ao menos 6 caracteres.'; return; }
+        const btn = document.getElementById('inviteAcceptBtn');
+        btn.disabled = true; btn.textContent = 'Criando conta...';
+        try {
+            const res = await fetch(CONFIG.workerUrl + '/auth/invite/accept', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: inviteToken, password: pw, name }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                msg.style.color = '#22c55e';
+                msg.textContent = 'Conta criada! Redirecionando para o login...';
+                setTimeout(() => { window.location.href = '/admin/'; }, 2000);
+            } else {
+                msg.textContent = data.error || 'Erro ao criar conta.';
+                btn.disabled = false; btn.textContent = 'Ativar minha conta';
+            }
+        } catch {
+            msg.textContent = 'Erro de conexão.';
+            btn.disabled = false; btn.textContent = 'Ativar minha conta';
+        }
+    });
+}
+
 // Handle password reset link (?reset=TOKEN)
 const resetToken = new URLSearchParams(window.location.search).get('reset');
 if (resetToken) {
@@ -626,6 +698,98 @@ document.getElementById('adminNav').addEventListener('click', e => {
     tab.classList.add('active');
     document.getElementById('catalogView').classList.toggle('hidden', view !== 'catalog');
     document.getElementById('calcView').classList.toggle('hidden', view !== 'calc');
+    document.getElementById('usersView').classList.toggle('hidden', view !== 'users');
+    if (view === 'users') loadUsersView();
+});
+
+/* ── USERS & INVITES VIEW ───────────────────────────────── */
+async function loadUsersView() {
+    await Promise.all([loadUsersList(), loadInvitesList()]);
+}
+
+async function loadUsersList() {
+    const el = document.getElementById('usersList');
+    el.innerHTML = '<div class="user-row-empty">Carregando...</div>';
+    try {
+        const res = await workerFetch('/auth/users');
+        const data = await res.json();
+        if (!res.ok) { el.innerHTML = `<div class="user-row-empty">${data.error}</div>`; return; }
+        if (!data.users.length) { el.innerHTML = '<div class="user-row-empty">Nenhum usuário cadastrado.</div>'; return; }
+        el.innerHTML = data.users.map(u => `
+            <div class="user-row">
+                <div class="user-avatar">${(u.name || u.email)[0].toUpperCase()}</div>
+                <div class="user-info">
+                    <div class="user-name">${u.name || '—'}</div>
+                    <div class="user-email">${u.email}</div>
+                </div>
+                <span class="user-badge badge-${u.role}">${u.role}</span>
+                <button class="user-action-btn" data-user-id="${u.id}" title="Remover usuário">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+            </div>`).join('');
+
+        el.querySelectorAll('.user-action-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.userId;
+                if (!confirm('Remover este usuário?')) return;
+                const r = await workerFetch(`/auth/users/${id}`, { method: 'DELETE' });
+                if (r.ok) { showToast('Usuário removido', 'success'); loadUsersList(); }
+                else { const d = await r.json(); showToast(d.error || 'Erro ao remover', 'error'); }
+            });
+        });
+    } catch { el.innerHTML = '<div class="user-row-empty">Erro ao carregar usuários.</div>'; }
+}
+
+async function loadInvitesList() {
+    const el = document.getElementById('invitesList');
+    el.innerHTML = '<div class="user-row-empty">Carregando...</div>';
+    try {
+        const res = await workerFetch('/auth/invites');
+        const data = await res.json();
+        if (!res.ok) { el.innerHTML = `<div class="user-row-empty">${data.error}</div>`; return; }
+        if (!data.invites.length) { el.innerHTML = '<div class="user-row-empty">Nenhum convite enviado ainda.</div>'; return; }
+        el.innerHTML = data.invites.map(i => {
+            const status = i.used_at ? 'used' : i.expired ? 'expired' : 'pending';
+            const label  = i.used_at ? 'Aceito' : i.expired ? 'Expirado' : 'Pendente';
+            return `<div class="user-row">
+                <div class="user-avatar" style="background:linear-gradient(135deg,#334155,#1e293b)">✉</div>
+                <div class="user-info">
+                    <div class="user-name">${i.email}</div>
+                    <div class="user-email">Enviado ${new Date(i.created_at * 1000).toLocaleDateString('pt-BR')}</div>
+                </div>
+                <span class="user-badge badge-${status}">${label}</span>
+            </div>`;
+        }).join('');
+    } catch { el.innerHTML = '<div class="user-row-empty">Erro ao carregar convites.</div>'; }
+}
+
+document.getElementById('inviteBtn').addEventListener('click', async () => {
+    const email = document.getElementById('inviteEmail').value.trim();
+    const msg   = document.getElementById('inviteMsg');
+    if (!email) { msg.className = 'invite-msg error'; msg.textContent = 'Digite um e-mail.'; return; }
+
+    const btn = document.getElementById('inviteBtn');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    msg.textContent = ''; msg.className = 'invite-msg';
+
+    try {
+        const res  = await workerFetch('/auth/invite', { method: 'POST', body: JSON.stringify({ email }) });
+        const data = await res.json();
+        if (res.ok) {
+            msg.className = 'invite-msg success';
+            msg.textContent = `Convite enviado para ${email}!`;
+            document.getElementById('inviteEmail').value = '';
+            loadInvitesList();
+        } else {
+            msg.className = 'invite-msg error';
+            msg.textContent = data.error || 'Erro ao enviar convite.';
+        }
+    } catch {
+        msg.className = 'invite-msg error';
+        msg.textContent = 'Erro de conexão.';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Enviar convite';
+    }
 });
 
 /* ── CALCULATOR ─────────────────────────────────────────── */

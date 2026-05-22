@@ -116,6 +116,33 @@ async function sendResetEmail(resendKey, toEmail, resetLink) {
   return res.ok;
 }
 
+async function sendInviteEmail(resendKey, toEmail, inviteLink, inviterName) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${resendKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Forgecon <noreply@forgecon.com.br>',
+      to: [toEmail],
+      subject: 'Convite para o Admin — Forgecon',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#7c3aed">Forgecon Admin</h2>
+          <p><strong>${inviterName}</strong> te convidou para acessar o painel administrativo da Forgecon.</p>
+          <p>Clique no botão abaixo para criar sua senha e ativar seu acesso. O link expira em <strong>48 horas</strong>.</p>
+          <a href="${inviteLink}"
+             style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+            Aceitar convite
+          </a>
+          <p style="color:#666;font-size:13px">Se você não esperava este convite, pode ignorar este email.</p>
+        </div>`,
+    }),
+  });
+  return res.ok;
+}
+
 // ── Cloudinary listing ────────────────────────────────────────────────────────
 
 async function listCloudinaryFolder(cloudName, apiKey, apiSecret, folder) {
@@ -302,6 +329,87 @@ async function handleRequest(request, env) {
       await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(targetId).run();
       await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(targetId).run();
       return json({ ok: true }, 200, origin);
+    }
+
+    // ── POST /auth/invite ─────────────────────────────────────────────────────
+    if (path === '/auth/invite' && request.method === 'POST') {
+      const me = await getSessionUser(env.DB, tokenFromRequest(request));
+      if (!me) return err('Não autenticado', 401, origin);
+      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+
+      const { email, role = 'admin' } = await request.json();
+      if (!email) return err('email é obrigatório', 400, origin);
+
+      const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
+      if (existing) return err('Este email já possui uma conta', 409, origin);
+
+      const pending = await env.DB.prepare(
+        'SELECT token FROM invites WHERE email = ? AND used_at IS NULL AND expires_at > ?'
+      ).bind(email.toLowerCase(), Math.floor(Date.now() / 1000)).first();
+      if (pending) return err('Já existe um convite pendente para este email', 409, origin);
+
+      const token = randomToken();
+      const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 48; // 48 horas
+      await env.DB.prepare(
+        'INSERT INTO invites (token, email, role, expires_at) VALUES (?, ?, ?, ?)'
+      ).bind(token, email.toLowerCase(), role, expiresAt).run();
+
+      const inviteLink = `${ALLOWED_ORIGIN}/admin/?invite=${token}`;
+      await sendInviteEmail(env.RESEND_API_KEY, email, inviteLink, me.name);
+
+      return json({ ok: true, message: 'Convite enviado com sucesso' }, 201, origin);
+    }
+
+    // ── GET /auth/invite?token=X ──────────────────────────────────────────────
+    if (path === '/auth/invite' && request.method === 'GET') {
+      const token = url.searchParams.get('token');
+      if (!token) return err('token é obrigatório', 400, origin);
+
+      const now = Math.floor(Date.now() / 1000);
+      const invite = await env.DB.prepare(
+        'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
+      ).bind(token, now).first();
+
+      if (!invite) return err('Convite inválido ou expirado', 400, origin);
+      return json({ email: invite.email, role: invite.role }, 200, origin);
+    }
+
+    // ── POST /auth/invite/accept ──────────────────────────────────────────────
+    if (path === '/auth/invite/accept' && request.method === 'POST') {
+      const { token, password, name } = await request.json();
+      if (!token || !password) return err('token e password são obrigatórios', 400, origin);
+
+      const now = Math.floor(Date.now() / 1000);
+      const invite = await env.DB.prepare(
+        'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
+      ).bind(token, now).first();
+
+      if (!invite) return err('Convite inválido ou expirado', 400, origin);
+
+      const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(invite.email).first();
+      if (existing) return err('Este email já possui uma conta', 409, origin);
+
+      const { salt, hash } = await hashPassword(password);
+      await env.DB.prepare(
+        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
+      ).bind(invite.email, name || invite.email, hash, salt, invite.role).run();
+
+      await env.DB.prepare('UPDATE invites SET used_at = ? WHERE token = ?').bind(now, token).run();
+
+      return json({ ok: true, message: 'Conta criada com sucesso. Faça login para continuar.' }, 201, origin);
+    }
+
+    // ── GET /auth/invites ─────────────────────────────────────────────────────
+    if (path === '/auth/invites' && request.method === 'GET') {
+      const me = await getSessionUser(env.DB, tokenFromRequest(request));
+      if (!me) return err('Não autenticado', 401, origin);
+      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+
+      const now = Math.floor(Date.now() / 1000);
+      const { results } = await env.DB.prepare(
+        'SELECT token, email, role, expires_at, used_at, created_at FROM invites ORDER BY created_at DESC'
+      ).all();
+      return json({ invites: results.map(i => ({ ...i, expired: !i.used_at && i.expires_at < now })) }, 200, origin);
     }
 
     // ── GET /cloudinary/list?folder=X ─────────────────────────────────────────

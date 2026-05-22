@@ -99,6 +99,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="11" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="11" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
                 Calculadora de Custo
             </button>
+            <button class="admin-nav-tab" data-view="users">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Usuários
+            </button>
         </nav>
 
         <!-- Content -->
@@ -138,6 +142,39 @@
                 <button class="btn btn-primary" id="addFromEmpty">+ Adicionar produto</button>
             </div>
             </div><!-- /catalogView -->
+
+            <!-- ── USUÁRIOS VIEW ─────────────────────────── -->
+            <div id="usersView" class="hidden">
+                <div class="content-header">
+                    <div>
+                        <h1>Usuários & Convites</h1>
+                        <p>Gerencie quem tem acesso ao painel administrativo</p>
+                    </div>
+                </div>
+
+                <!-- Convidar -->
+                <div class="users-invite-card">
+                    <h3>Convidar novo administrador</h3>
+                    <p>O convidado receberá um e-mail com link para criar a senha de acesso. O link expira em 48 horas.</p>
+                    <div class="invite-form-row">
+                        <input type="email" id="inviteEmail" placeholder="email@exemplo.com" class="input-full">
+                        <button class="btn btn-primary" id="inviteBtn">Enviar convite</button>
+                    </div>
+                    <span id="inviteMsg" class="invite-msg"></span>
+                </div>
+
+                <!-- Lista de usuários -->
+                <div class="users-section">
+                    <h3 class="users-section-title">Usuários ativos</h3>
+                    <div id="usersList" class="users-list"></div>
+                </div>
+
+                <!-- Lista de convites -->
+                <div class="users-section">
+                    <h3 class="users-section-title">Convites enviados</h3>
+                    <div id="invitesList" class="users-list"></div>
+                </div>
+            </div><!-- /usersView -->
 
             <!-- ── CALCULADORA VIEW ───────────────────────── -->
             <div id="calcView" class="hidden">

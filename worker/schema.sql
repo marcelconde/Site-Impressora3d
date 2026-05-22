@@ -26,5 +26,15 @@ CREATE TABLE IF NOT EXISTS reset_tokens (
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+CREATE TABLE IF NOT EXISTS invites (
+  token      TEXT    PRIMARY KEY,
+  email      TEXT    NOT NULL,
+  role       TEXT    NOT NULL DEFAULT 'admin',
+  expires_at INTEGER NOT NULL,
+  used_at    INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_reset_user    ON reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email);
