@@ -473,6 +473,83 @@ document.getElementById('addExtraImageBtn').addEventListener('click', () => {
     if (inputs.length) inputs[inputs.length - 1].focus();
 });
 
+document.getElementById('syncCloudinaryBtn').addEventListener('click', async () => {
+    const folder = document.getElementById('imagePublicId').value.trim();
+    const hint   = document.getElementById('syncHint');
+    const btn    = document.getElementById('syncCloudinaryBtn');
+
+    if (!folder) {
+        hint.textContent = 'Preencha a pasta da foto de capa primeiro (ex: Geek/Pikachu/capa).';
+        hint.style.color = 'var(--red)';
+        return;
+    }
+
+    // Deriva a pasta do produto a partir do path da capa (remove o último segmento)
+    const parts = folder.split('/');
+    const productFolder = parts.length > 1 ? 'Produtos/' + parts.slice(0, -1).join('/') : 'Produtos';
+
+    btn.disabled = true;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg> Buscando...`;
+    hint.style.color = '';
+    hint.textContent = `Buscando fotos em ${productFolder}...`;
+
+    try {
+        const res  = await workerFetch(`/cloudinary/list?folder=${encodeURIComponent(productFolder)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+            hint.textContent = data.error || 'Erro ao buscar fotos.';
+            hint.style.color = 'var(--red)';
+            return;
+        }
+
+        if (!data.images.length) {
+            hint.textContent = 'Nenhuma foto encontrada nessa pasta.';
+            return;
+        }
+
+        extraImages = [];
+        const list = document.getElementById('extraImagesList');
+        list.innerHTML = `<p style="font-size:.8rem;color:var(--text2);margin:6px 0">Clique nas fotos para incluir (a capa já é adicionada automaticamente):</p>
+            <div class="cld-thumb-grid" id="cldThumbGrid"></div>`;
+
+        const coverFull = 'Produtos/' + folder;
+        const grid = document.getElementById('cldThumbGrid');
+
+        data.images.forEach(img => {
+            const isCover = img.public_id === coverFull;
+            const thumb = document.createElement('img');
+            thumb.src = `https://res.cloudinary.com/${CONFIG.cloudName}/image/upload/w_140,h_140,c_fill,q_auto,f_auto/${img.public_id}`;
+            thumb.className = 'cld-thumb' + (isCover ? ' selected' : '');
+            thumb.title = img.public_id;
+
+            if (!isCover) {
+                thumb.addEventListener('click', () => {
+                    const path = img.public_id.replace('Produtos/', '');
+                    if (thumb.classList.contains('selected')) {
+                        thumb.classList.remove('selected');
+                        extraImages = extraImages.filter(e => e !== path);
+                    } else {
+                        thumb.classList.add('selected');
+                        extraImages.push(path);
+                    }
+                });
+            }
+            grid.appendChild(thumb);
+        });
+
+        hint.textContent = `${data.images.length} foto(s) encontrada(s). Selecione as que deseja incluir.`;
+        hint.style.color = 'var(--green)';
+
+    } catch {
+        hint.textContent = 'Erro de conexão com o Cloudinary.';
+        hint.style.color = 'var(--red)';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg> Buscar fotos`;
+    }
+});
+
 document.getElementById('colorInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         e.preventDefault();
