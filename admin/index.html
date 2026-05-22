@@ -22,15 +22,45 @@
             </div>
             <form id="loginForm">
                 <div class="form-group">
-                    <label for="loginPassword">Senha de acesso</label>
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Senha</label>
                     <div class="password-wrap">
-                        <input type="password" id="loginPassword" placeholder="Digite sua senha" autocomplete="current-password" required>
+                        <input type="password" id="loginPassword" placeholder="Sua senha" autocomplete="current-password" required>
                         <button type="button" class="toggle-pw" id="togglePw">👁</button>
                     </div>
-                    <span class="login-error" id="loginError"></span>
                 </div>
-                <button type="submit" class="btn btn-primary btn-full">Entrar</button>
+                <span class="login-error" id="loginError"></span>
+                <button type="submit" class="btn btn-primary btn-full" id="loginBtn">Entrar</button>
+                <p style="text-align:center;margin-top:12px;font-size:13px">
+                    <a href="#" id="forgotLink" style="color:var(--purple-light);text-decoration:none">Esqueci minha senha</a>
+                </p>
             </form>
+            <div id="forgotForm" class="hidden">
+                <div class="form-group">
+                    <label for="forgotEmail">E-mail para redefinição</label>
+                    <input type="email" id="forgotEmail" placeholder="seu@email.com" autocomplete="email">
+                </div>
+                <span class="login-error" id="forgotMsg"></span>
+                <button type="button" class="btn btn-primary btn-full" id="forgotBtn">Enviar link</button>
+                <p style="text-align:center;margin-top:12px;font-size:13px">
+                    <a href="#" id="backToLogin" style="color:var(--purple-light);text-decoration:none">Voltar ao login</a>
+                </p>
+            </div>
+            <div id="resetForm" class="hidden">
+                <div class="form-group">
+                    <label for="resetPw">Nova senha</label>
+                    <input type="password" id="resetPw" placeholder="Nova senha" required>
+                </div>
+                <div class="form-group">
+                    <label for="resetPwConfirm">Confirmar senha</label>
+                    <input type="password" id="resetPwConfirm" placeholder="Repita a senha" required>
+                </div>
+                <span class="login-error" id="resetMsg"></span>
+                <button type="button" class="btn btn-primary btn-full" id="resetBtn">Salvar nova senha</button>
+            </div>
         </div>
     </div>
 

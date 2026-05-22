@@ -1,6 +1,6 @@
 /* ── CONFIG ─────────────────────────────────────────────── */
 const CONFIG = {
-    passwordHash: '9a746577e31a49afb2e11da31af438be9cec053a39e8db95bf4494a3672fcf8f',
+    workerUrl: 'https://forgecon-auth.marcel-conde.workers.dev',
     cloudName: 'das730gjc',
     uploadPreset: 'print3d_upload',
     storageKey: 'print3d_products',
@@ -42,10 +42,29 @@ const loginForm   = document.getElementById('loginForm');
 const loginError  = document.getElementById('loginError');
 const togglePw    = document.getElementById('togglePw');
 const loginPw     = document.getElementById('loginPassword');
+const loginEmail  = document.getElementById('loginEmail');
+const loginBtn    = document.getElementById('loginBtn');
 const logoutBtn   = document.getElementById('logoutBtn');
+const forgotLink  = document.getElementById('forgotLink');
+const forgotForm  = document.getElementById('forgotForm');
+const forgotBtn   = document.getElementById('forgotBtn');
+const forgotMsg   = document.getElementById('forgotMsg');
+const backToLogin = document.getElementById('backToLogin');
+
+function getToken() {
+    return sessionStorage.getItem('forgecon_token');
+}
 
 function isLoggedIn() {
-    return sessionStorage.getItem('print3d_auth') === '1';
+    return !!getToken();
+}
+
+async function workerFetch(path, options = {}) {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(CONFIG.workerUrl + path, { ...options, headers });
+    return res;
 }
 
 function showPanel() {
@@ -57,10 +76,13 @@ function showPanel() {
 }
 
 function showLogin() {
-    sessionStorage.removeItem('print3d_auth');
+    sessionStorage.removeItem('forgecon_token');
     adminPanel.classList.add('hidden');
     loginScreen.classList.remove('hidden');
+    loginForm.classList.remove('hidden');
+    forgotForm.classList.add('hidden');
     loginPw.value = '';
+    loginEmail.value = '';
     loginError.textContent = '';
 }
 
@@ -71,26 +93,114 @@ togglePw.addEventListener('click', () => {
 
 loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const hash = await sha256(loginPw.value);
-    if (hash === CONFIG.passwordHash) {
-        sessionStorage.setItem('print3d_auth', '1');
-        loginError.textContent = '';
-        showPanel();
-    } else {
-        loginError.textContent = 'Senha incorreta. Tente novamente.';
-        loginPw.value = '';
-        loginPw.focus();
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Entrando...';
+    loginError.textContent = '';
+    try {
+        const res = await fetch(CONFIG.workerUrl + '/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: loginEmail.value.trim(), password: loginPw.value }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            sessionStorage.setItem('forgecon_token', data.token);
+            showPanel();
+        } else {
+            loginError.textContent = data.error || 'Credenciais inválidas.';
+            loginPw.value = '';
+            loginPw.focus();
+        }
+    } catch {
+        loginError.textContent = 'Erro de conexão. Tente novamente.';
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Entrar';
     }
 });
 
-async function sha256(str) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+forgotLink.addEventListener('click', e => {
+    e.preventDefault();
+    loginForm.classList.add('hidden');
+    forgotForm.classList.remove('hidden');
+    forgotMsg.textContent = '';
+    forgotMsg.style.color = '';
+});
 
-logoutBtn.addEventListener('click', showLogin);
+backToLogin.addEventListener('click', e => {
+    e.preventDefault();
+    forgotForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+});
 
-if (isLoggedIn()) {
+forgotBtn.addEventListener('click', async () => {
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) return;
+    forgotBtn.disabled = true;
+    forgotBtn.textContent = 'Enviando...';
+    try {
+        await fetch(CONFIG.workerUrl + '/auth/forgot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        forgotMsg.style.color = '#22c55e';
+        forgotMsg.textContent = 'Se esse e-mail existir, você receberá o link em breve.';
+    } catch {
+        forgotMsg.textContent = 'Erro ao enviar. Tente novamente.';
+    } finally {
+        forgotBtn.disabled = false;
+        forgotBtn.textContent = 'Enviar link';
+    }
+});
+
+logoutBtn.addEventListener('click', async () => {
+    const token = getToken();
+    if (token) {
+        fetch(CONFIG.workerUrl + '/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        }).catch(() => {});
+    }
+    showLogin();
+});
+
+// Handle password reset link (?reset=TOKEN)
+const resetToken = new URLSearchParams(window.location.search).get('reset');
+if (resetToken) {
+    loginForm.classList.add('hidden');
+    forgotForm.classList.add('hidden');
+    document.getElementById('resetForm').classList.remove('hidden');
+
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+        const pw  = document.getElementById('resetPw').value;
+        const pw2 = document.getElementById('resetPwConfirm').value;
+        const msg = document.getElementById('resetMsg');
+        if (pw !== pw2) { msg.textContent = 'As senhas não coincidem.'; return; }
+        if (pw.length < 6) { msg.textContent = 'Senha deve ter ao menos 6 caracteres.'; return; }
+        const btn = document.getElementById('resetBtn');
+        btn.disabled = true; btn.textContent = 'Salvando...';
+        try {
+            const res = await fetch(CONFIG.workerUrl + '/auth/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: resetToken, password: pw }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                msg.style.color = '#22c55e';
+                msg.textContent = 'Senha redefinida! Redirecionando...';
+                setTimeout(() => { window.location.href = '/admin/'; }, 2000);
+            } else {
+                msg.textContent = data.error || 'Token inválido ou expirado.';
+            }
+        } catch {
+            msg.textContent = 'Erro de conexão.';
+        } finally {
+            btn.disabled = false; btn.textContent = 'Salvar nova senha';
+        }
+    });
+} else if (isLoggedIn()) {
     showPanel();
 }
 
