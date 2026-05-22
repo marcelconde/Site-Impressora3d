@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <style>
+      @keyframes head-x {
+        0%   { transform: translateX(0px);  }
+        50%  { transform: translateX(9px);  }
+        100% { transform: translateX(0px);  }
+      }
+      @keyframes build {
+        0%        { clip-path: inset(100% 0 0 0); }
+        55%       { clip-path: inset(0%   0 0 0); }
+        85%       { clip-path: inset(0%   0 0 0); }
+        97%, 100% { clip-path: inset(100% 0 0 0); }
+      }
+      @keyframes nozzle-glow {
+        0%,100% { opacity: .6; }
+        50%     { opacity: 1;  }
+      }
+      .head  { animation: head-x      2.4s ease-in-out infinite; }
+      .part  { animation: build       7.2s ease-in-out infinite; }
+      .tip   { animation: nozzle-glow 1.2s ease-in-out infinite; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="#06060f"/>
+
+  <!-- Left pillar -->
+  <rect x="3"  y="9" width="2.5" height="16" rx="1" fill="#4c1d95"/>
+  <!-- Right pillar -->
+  <rect x="26.5" y="9" width="2.5" height="16" rx="1" fill="#4c1d95"/>
+
+  <!-- Top rail -->
+  <rect x="3" y="8" width="26" height="3" rx="1.5" fill="#7c3aed"/>
+
+  <!-- Print bed -->
+  <rect x="4" y="25" width="24" height="2.5" rx="1" fill="#6d28d9"/>
+
+  <!-- Moving head -->
+  <g class="head" style="transform-origin:0 0">
+    <rect x="4" y="9" width="6" height="3" rx="1" fill="#a78bfa"/>
+    <!-- Nozzle body -->
+    <rect x="6" y="12" width="2" height="2.5" rx=".5" fill="#a78bfa"/>
+    <!-- Nozzle tip glow -->
+    <circle class="tip" cx="7" cy="15" r="1.5" fill="#0ea5e9"/>
+  </g>
+
+  <!-- Object being built -->
+  <rect class="part" x="5" y="17" width="13" height="8" rx="1.5" fill="#0ea5e9" opacity=".9"/>
+</svg>
