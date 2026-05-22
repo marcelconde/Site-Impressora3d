@@ -459,47 +459,24 @@ section { position: relative; }
     100% { transform: translate(80px,  75px); }
 }
 
-/* Filament line fades with movement */
-.p-filament {
-    animation: filamentPulse 5s ease-in-out infinite;
-}
-@keyframes filamentPulse {
-    0%,100% { opacity: .5; }
-    25%,75% { opacity: .8; }
-    50%     { opacity: .5; }
-}
-
-/* Nozzle hot-tip glow pulses */
+/* Nozzle glow — subtle pulse, no scale */
 .p-nozzle-outer {
-    animation: nozzleOuter .45s ease-in-out infinite alternate;
+    animation: nozzleGlow 1.8s ease-in-out infinite alternate;
 }
-@keyframes nozzleOuter {
-    from { opacity: .6; transform: scale(.8); }
-    to   { opacity: 1;  transform: scale(1.25); }
-}
-.p-nozzle-inner {
-    animation: nozzleInner .45s ease-in-out infinite alternate;
-}
-@keyframes nozzleInner {
-    from { opacity: .7; }
+@keyframes nozzleGlow {
+    from { opacity: .5; }
     to   { opacity: 1; }
 }
 
-/* Object layers build up one by one */
-.p-layer { opacity: 0; animation: layerBuild 9s ease-in-out infinite; }
-.l1 { animation-delay: 0.0s; }
-.l2 { animation-delay: 0.7s; }
-.l3 { animation-delay: 1.4s; }
-.l4 { animation-delay: 2.1s; }
-.l5 { animation-delay: 2.8s; }
-.l6 { animation-delay: 3.5s; }
-.l7 { animation-delay: 4.2s; }
-
-@keyframes layerBuild {
-    0%          { opacity: 0;    transform: translateY(5px); }
-    8%          { opacity: 0.88; transform: translateY(0); }
-    82%         { opacity: 0.88; transform: translateY(0); }
-    96%, 100%   { opacity: 0;    transform: translateY(0); }
+/* Object builds from bottom to top via clip-path */
+.p-object {
+    animation: buildObject 9s ease-in-out infinite;
+}
+@keyframes buildObject {
+    0%        { clip-path: inset(100% 0 0 0); }
+    55%       { clip-path: inset(0% 0 0 0); }
+    83%       { clip-path: inset(0% 0 0 0); }
+    96%, 100% { clip-path: inset(100% 0 0 0); }
 }
 
 /* Print bed heat shimmer */
