@@ -387,10 +387,17 @@ function openModal(id) {
     const p = PRODUCTS.find(x => x.id === id);
     if (!p) return;
 
-    const modalImgUrl = CLOUDINARY.url(p.image, { width: 800, height: 450 });
-    const modalPreview = modalImgUrl
-        ? `<div class="modal-preview has-image"><img src="${modalImgUrl}" alt="${p.name}" onerror="this.parentElement.classList.remove('has-image');this.innerHTML='${p.emoji}'"></div>`
-        : `<div class="modal-preview ${pvClass(p.category)}">${p.emoji}</div>`;
+    const allImages = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
+    const modalPreview = allImages.length
+        ? `<div class="modal-gallery">
+            <div class="modal-gallery-main">
+                <img id="mgMain" src="${CLOUDINARY.url(allImages[0], {width:800,height:500})}" alt="${p.name}">
+            </div>
+            ${allImages.length > 1 ? `<div class="modal-gallery-thumbs">
+                ${allImages.map((img, i) => `<img src="${CLOUDINARY.url(img, {width:120,height:90})}" class="mg-thumb${i===0?' active':''}" data-full="${CLOUDINARY.url(img, {width:800,height:500})}" alt="${p.name} ${i+1}">`).join('')}
+            </div>` : ''}
+           </div>`
+        : `<div class="modal-preview ${pvClass(p.category)}">${p.emoji || '📦'}</div>`;
 
     modalBody.innerHTML = `
         ${modalPreview}
@@ -420,6 +427,13 @@ function openModal(id) {
 
     document.getElementById('modalOrder').addEventListener('click', closeModal);
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.querySelectorAll('.mg-thumb').forEach(thumb => {
+        thumb.addEventListener('click', () => {
+            document.getElementById('mgMain').src = thumb.dataset.full;
+            document.querySelectorAll('.mg-thumb').forEach(t => t.classList.remove('active'));
+            thumb.classList.add('active');
+        });
+    });
 }
 
 function closeModal() {

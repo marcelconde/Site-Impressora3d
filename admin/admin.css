@@ -438,6 +438,10 @@ select option { background: var(--bg3); }
 .form-err { font-size: .76rem; color: #f87171; min-height: 16px; }
 
 /* Colors tag input */
+.extra-img-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.extra-img-row .input-full { flex: 1; }
+.extra-images-section { margin-top: 4px; }
+
 .colors-wrap { display: flex; flex-direction: column; gap: 8px; }
 .color-tags { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
 .color-tag {

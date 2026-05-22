@@ -15,6 +15,7 @@ let currentFilter = 'all';
 let editingId = null;
 let pendingDeleteId = null;
 let currentColors = [];
+let extraImages = [];
 
 /* ── STORAGE ────────────────────────────────────────────── */
 function loadProducts() {
@@ -215,11 +216,13 @@ function openModal(id) {
         document.getElementById('imagePublicId').value = p.image || '';
         if (p.image) showImagePreview(CLD_URL(p.image));
         currentColors = Array.isArray(p.colors) ? [...p.colors] : [];
+        extraImages = Array.isArray(p.images) ? p.images.filter(i => i !== p.image) : [];
     } else {
         modalTitle.textContent = 'Novo Produto';
     }
 
     renderColorTags();
+    renderExtraImages();
     productModal.classList.remove('hidden');
     document.getElementById('fName').focus();
 }
@@ -245,7 +248,9 @@ function resetForm() {
     document.getElementById('uploadProgressWrap').classList.add('hidden');
     document.getElementById('uploadProgressBar').style.width = '0';
     currentColors = [];
+    extraImages = [];
     renderColorTags();
+    renderExtraImages();
     clearErrors();
 }
 
@@ -262,6 +267,29 @@ function renderColorTags() {
         })
     );
 }
+
+function renderExtraImages() {
+    const list = document.getElementById('extraImagesList');
+    list.innerHTML = extraImages.map((img, i) => `
+        <div class="extra-img-row">
+            <input type="text" value="${esc(img)}" placeholder="Ex: Geek/Produto/foto2" class="input-full extra-img-input" data-i="${i}">
+            <button type="button" class="btn btn-del btn-sm extra-img-remove" data-i="${i}">✕</button>
+        </div>
+    `).join('');
+    list.querySelectorAll('.extra-img-input').forEach(inp =>
+        inp.addEventListener('input', e => { extraImages[+e.target.dataset.i] = e.target.value.trim(); })
+    );
+    list.querySelectorAll('.extra-img-remove').forEach(btn =>
+        btn.addEventListener('click', e => { extraImages.splice(+e.target.dataset.i, 1); renderExtraImages(); })
+    );
+}
+
+document.getElementById('addExtraImageBtn').addEventListener('click', () => {
+    extraImages.push('');
+    renderExtraImages();
+    const inputs = document.querySelectorAll('.extra-img-input');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+});
 
 document.getElementById('colorInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
@@ -410,6 +438,7 @@ productForm.addEventListener('submit', e => {
         emoji: document.getElementById('fEmoji').value.trim() || null,
         badge: document.getElementById('fBadge').value.trim() || null,
         image: document.getElementById('imagePublicId').value.trim() || null,
+        images: [document.getElementById('imagePublicId').value.trim(), ...extraImages].filter(Boolean),
         rating: existing?.rating ?? 5.0,
         reviews: existing?.reviews ?? 0,
     };
