@@ -17,7 +17,7 @@ let pendingDeleteId = null;
 let currentColors = [];
 let extraImages = [];
 let auditPollTimer = null;
-let loggedUser = null; // Guardará as informações de quem está logado
+let loggedUser = null; 
 
 /* ── STORAGE ────────────────────────────────────────────── */
 function loadProducts() {
@@ -69,21 +69,15 @@ async function workerFetch(path, options = {}) {
     return res;
 }
 
-// Essa função envia os eventos de criar/editar produtos para o banco de dados
+// ── AUDITORIA DO FRONTEND ENVIADA PARA O BACKEND ──
 async function recordAdminAudit(action, entity, entityId, details = {}) {
     try {
-        // Envia um pedido para a api bater o ponto de auditoria
-        // Note: Como a rota antiga não existia mais no Worker, a IA anterior falhava silenciosamente
-        // Vou adicionar um aviso no console para debugar se necessário
-        const token = getToken();
-        if(!token) return;
-
-        // Mandando a requisição para a rota de criação de usuários (um hack para reutilizar a estrutura da IA)
-        // Isso precisaria ser corrigido lá no Worker para ter um "POST /auth/audit-logs" 
-        // Mas por enquanto, vamos focar em esconder a aba!
-        console.log("Tentando registrar auditoria:", action, entity, entityId);
+        await workerFetch('/auth/audit-logs', {
+            method: 'POST',
+            body: JSON.stringify({ action, entity, entityId, details }),
+        });
     } catch (err) {
-        console.warn('Falha ao registrar auditoria:', err);
+        console.warn('Falha ao registrar auditoria no servidor:', err);
     }
 }
 
@@ -91,7 +85,6 @@ async function showPanel() {
     loginScreen.classList.add('hidden');
     adminPanel.classList.remove('hidden');
     
-    // Descobre quem é o usuário logado e guarda na variável global
     try {
         const res = await workerFetch('/auth/me');
         if (res.ok) {
@@ -102,7 +95,7 @@ async function showPanel() {
         console.error("Erro ao puxar dados do usuário", e);
     }
 
-    setupAuditView(); // Agora o setup tem o e-mail para validar!
+    setupAuditView(); 
     loadProducts();
     renderGrid();
     updateStats();
@@ -140,7 +133,7 @@ loginForm.addEventListener('submit', async e => {
         const data = await res.json();
         if (res.ok) {
             sessionStorage.setItem('forgecon_token', data.token);
-            loggedUser = data.user; // Já salva direto do login
+            loggedUser = data.user; 
             showPanel();
         } else {
             loginError.textContent = data.error || 'Credenciais inválidas.';
@@ -973,6 +966,9 @@ function brl(v) {
     return `R$ ${v.toFixed(2).replace('.', ',')}`;
 }
 
+// ── LÓGICA DE AUDITORIA DA CALCULADORA (Espera o usuário parar de digitar para enviar) ──
+let calcAuditTimer = null; 
+
 function calcUpdate() {
     const mat      = MATERIALS[document.getElementById('cMaterial').value] || MATERIALS.pla;
     const priceKg  = parseFloat(document.getElementById('cPriceKg').value) || 0;
@@ -1001,6 +997,19 @@ function calcUpdate() {
     document.getElementById('m100').textContent = brl(total * 2);
     document.getElementById('m150').textContent = brl(total * 2.5);
     document.getElementById('m200').textContent = brl(total * 3);
+
+    // Manda a auditoria se teve algum input válido
+    clearTimeout(calcAuditTimer);
+    calcAuditTimer = setTimeout(() => {
+        if(qty > 0 || hours > 0 || mins > 0) {
+            recordAdminAudit('usou_calculadora', 'calculadora', null, {
+                material: document.getElementById('cMaterial').value,
+                peso: qty + 'g',
+                tempo: hours + 'h ' + mins + 'm',
+                custo_total: brl(total)
+            });
+        }
+    }, 3500); 
 }
 
 /* ── ESC to close ───────────────────────────────────────── */
@@ -1021,7 +1030,6 @@ function setupAuditView() {
 
     if (!nav || !panel) return;
 
-    // A MÁGICA ACONTECE AQUI: Só cria a aba se o usuário for o Marcel
     const isSuperAdmin = loggedUser && loggedUser.email === 'marcel.conde@hotmail.com';
 
     if (isSuperAdmin && !document.querySelector('.admin-nav-tab[data-view="audit"]')) {
@@ -1033,7 +1041,6 @@ function setupAuditView() {
         nav.appendChild(tab);
     }
 
-    // Ocultar e remover as view de quem não é super-admin
     if (!isSuperAdmin) {
        const auditTab = document.querySelector('.admin-nav-tab[data-view="audit"]');
        if(auditTab) auditTab.remove();
@@ -1088,6 +1095,12 @@ function auditActionLabel(action) {
         delete: 'Removeu',
         invite: 'Convidou',
         accept_invite: 'Aceitou convite',
+        usou_calculadora: 'Calculou custo',
+        recuperar_senha: 'Pediu para recuperar senha',
+        redefinir_senha: 'Redefiniu senha',
+        criar_usuario: 'Criou usuário',
+        excluir_usuario: 'Excluiu usuário',
+        enviar_convite: 'Enviou convite'
     };
     return labels[action] || action;
 }
@@ -1099,6 +1112,9 @@ function auditEntityLabel(entity) {
         user: 'usuário',
         category: 'categoria',
         gallery: 'galeria',
+        calculadora: 'na calculadora',
+        users: 'de sistema',
+        invites: 'para novo administrador'
     };
     return esc(labels[entity] || entity);
 }
