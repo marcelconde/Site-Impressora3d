@@ -1,12 +1,13 @@
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
+const PBKDF2_ITERATIONS = 310_000;
 
 function cors(origin) {
-  const allowed = origin === ALLOWED_ORIGIN || origin === 'http://localhost:3000';
+  const allowed = origin === ALLOWED_ORIGIN;
   return {
     'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
+    'Access-Control-Allow-Max-Age': '86400',
   };
 }
 
@@ -31,7 +32,7 @@ async function hashPassword(password, saltHex) {
 
   const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 10_000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     key, 256
   );
   return {
@@ -187,20 +188,9 @@ async function handleRequest(request, env) {
     }
 
     // ── POST /auth/setup ──────────────────────────────────────────────────────
-    // Creates the very first admin user. Disabled once any user exists.
-    if (path === '/auth/setup' && request.method === 'POST') {
-      const count = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first();
-      if (count.n > 0) return err('Setup already done', 403, origin);
-
-      const { email, password, name } = await request.json();
-      if (!email || !password) return err('email e password são obrigatórios', 400, origin);
-
-      const { salt, hash } = await hashPassword(password);
-      await env.DB.prepare(
-        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
-      ).bind(email, name || 'Admin', hash, salt, 'admin').run();
-
-      return json({ ok: true, message: 'Usuário admin criado com sucesso' }, 201, origin);
+    // Bootstrap endpoint intentionally disabled in production.
+    if (path === '/auth/setup') {
+      return err('Setup endpoint disabled', 404, origin);
     }
 
     // ── POST /auth/login ──────────────────────────────────────────────────────
