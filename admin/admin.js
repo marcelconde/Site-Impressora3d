@@ -733,17 +733,17 @@ productForm.addEventListener('submit', async e => {
         const idx = products.findIndex(p => p.id === editingId);
         if (idx !== -1) products[idx] = product;
         await recordAdminAudit('update', 'product', product.id, {
-            name: product.name,
-            category: product.category,
-            price: product.price,
+            nome: product.name,
+            categoria: product.category,
+            preco: product.price ? `R$ ${product.price}` : 'Não definido',
         });
         showToast('Produto atualizado!');
     } else {
         products.push(product);
         await recordAdminAudit('create', 'product', product.id, {
-            name: product.name,
-            category: product.category,
-            price: product.price,
+            nome: product.name,
+            categoria: product.category,
+            preco: product.price ? `R$ ${product.price}` : 'Não definido',
         });
         showToast('Produto adicionado!');
     }
@@ -785,9 +785,8 @@ doDelete.addEventListener('click', async () => {
     const deletedProduct = products.find(p => p.id === pendingDeleteId);
     products = products.filter(p => p.id !== pendingDeleteId);
     await recordAdminAudit('delete', 'product', pendingDeleteId, deletedProduct ? {
-        name: deletedProduct.name,
-        category: deletedProduct.category,
-        price: deletedProduct.price,
+        nome: deletedProduct.name,
+        categoria: deletedProduct.category,
     } : {});
     saveProducts();
     confirmOverlay.classList.add('hidden');
@@ -966,7 +965,6 @@ function brl(v) {
     return `R$ ${v.toFixed(2).replace('.', ',')}`;
 }
 
-// ── LÓGICA DE AUDITORIA DA CALCULADORA (Espera o usuário parar de digitar para enviar) ──
 let calcAuditTimer = null; 
 
 function calcUpdate() {
@@ -998,7 +996,6 @@ function calcUpdate() {
     document.getElementById('m150').textContent = brl(total * 2.5);
     document.getElementById('m200').textContent = brl(total * 3);
 
-    // Manda a auditoria se teve algum input válido
     clearTimeout(calcAuditTimer);
     calcAuditTimer = setTimeout(() => {
         if(qty > 0 || hours > 0 || mins > 0) {
@@ -1085,60 +1082,60 @@ function stopAuditPolling() {
     }
 }
 
-/* ── AUDIT VIEW ─────────────────────────────────────────── */
+/* ── NOVO LAYOUT DE AUDITORIA ─────────────────────────────────────────── */
+
+function auditIcon(action) {
+    const icons = {
+        login: '🔑', logout: '🚪', create: '➕', update: '✏️', delete: '🗑️',
+        invite: '✉️', accept_invite: '🤝', usou_calculadora: '🧮',
+        recuperar_senha: '🆘', redefinir_senha: '🔐', criar_usuario: '👤',
+        excluir_usuario: '🚫', enviar_convite: '📨'
+    };
+    return icons[action] || '📌';
+}
+
 function auditActionLabel(action) {
     const labels = {
-        login: 'Login',
-        logout: 'Logout',
-        create: 'Criou',
-        update: 'Editou',
-        delete: 'Removeu',
-        invite: 'Convidou',
-        accept_invite: 'Aceitou convite',
-        usou_calculadora: 'Calculou custo',
-        recuperar_senha: 'Pediu para recuperar senha',
-        redefinir_senha: 'Redefiniu senha',
-        criar_usuario: 'Criou usuário',
-        excluir_usuario: 'Excluiu usuário',
-        enviar_convite: 'Enviou convite'
+        login: 'Login', logout: 'Logout', create: 'Criou', update: 'Editou',
+        delete: 'Removeu', invite: 'Convidou', accept_invite: 'Aceitou convite',
+        usou_calculadora: 'Calculou custo', recuperar_senha: 'Pediu para recuperar senha',
+        redefinir_senha: 'Redefiniu senha', criar_usuario: 'Criou usuário',
+        excluir_usuario: 'Excluiu usuário', enviar_convite: 'Enviou convite'
     };
     return labels[action] || action;
 }
 
 function auditEntityLabel(entity) {
     const labels = {
-        auth: 'autenticação',
-        product: 'produto',
-        user: 'usuário',
-        category: 'categoria',
-        gallery: 'galeria',
-        calculadora: 'na calculadora',
-        users: 'de sistema',
-        invites: 'para novo administrador'
+        auth: 'no sistema', product: 'produto', user: 'usuário',
+        category: 'categoria', gallery: 'galeria', calculadora: 'na calculadora',
+        users: 'de sistema', invites: 'para administrador'
     };
     return esc(labels[entity] || entity);
 }
 
 function formatAuditDate(ts) {
     if (!ts) return '—';
-
     const date = typeof ts === 'number'
         ? new Date(ts * 1000)
         : new Date(String(ts).replace(' ', 'T') + 'Z');
-
     if (Number.isNaN(date.getTime())) return String(ts);
-
-    return date.toLocaleString('pt-BR', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-    });
+    return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function auditDetailsText(details) {
-    if (!details || typeof details !== 'object') return '';
-    return Object.entries(details)
-        .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
-        .join(' • ');
+// Cria os "badges/pílulas" elegantes para os detalhes
+function renderAuditDetails(details) {
+    if (!details || typeof details !== 'object' || Object.keys(details).length === 0) return '';
+    return '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">' +
+        Object.entries(details).map(([key, value]) => {
+            const cleanKey = esc(key.replace(/_/g, ' ').toUpperCase());
+            const cleanVal = esc(typeof value === 'object' ? JSON.stringify(value) : value);
+            // Estilo visual moderno das pílulas para contrastar com o fundo escuro
+            return `<span style="background: rgba(255,255,255,0.05); color: #cbd5e1; font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); font-weight: 500;">
+                        ${cleanKey}: <strong style="color: #fff">${cleanVal}</strong>
+                    </span>`;
+        }).join('') +
+        '</div>';
 }
 
 async function loadAuditLogs(showLoading = true) {
@@ -1164,15 +1161,26 @@ async function loadAuditLogs(showLoading = true) {
         const subtitle = document.getElementById('auditSubtitle');
         if (subtitle) subtitle.textContent = `${data.logs.length} evento(s) recentes. Atualização automática a cada 5 segundos.`;
 
+        // Renderiza cada log com o novo layout moderno e limpo
         el.innerHTML = data.logs.map(log => `
-            <div class="user-row audit-row">
-                <div class="user-avatar" style="background:linear-gradient(135deg,#7c3aed,#2563eb)">${auditActionLabel(log.action)[0]}</div>
-                <div class="user-info">
-                    <div class="user-name">${auditActionLabel(log.action)} ${auditEntityLabel(log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</div>
-                    <div class="user-email">${esc(log.user_name || 'Usuário')} • ${esc(log.user_email || 'sem e-mail')} • ${formatAuditDate(log.created_at)}</div>
-                    <div class="user-email">${esc(auditDetailsText(log.details))}</div>
+            <div style="background: var(--bg-panel, #151821); border: 1px solid var(--border, #2a2e3d); border-radius: 8px; padding: 16px; margin-bottom: 12px; display: flex; gap: 16px; align-items: flex-start; transition: border-color 0.2s;">
+                <div style="font-size: 1.2rem; background: rgba(124, 58, 237, 0.1); width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(124, 58, 237, 0.2);">
+                    ${auditIcon(log.action)}
                 </div>
-                <span class="user-badge badge-admin">${esc(log.action)}</span>
+                <div style="flex-grow: 1; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; flex-wrap: wrap; gap: 8px;">
+                        <span style="color: #f8fafc; font-weight: 600; font-size: 0.95rem;">
+                            ${auditActionLabel(log.action)} ${auditEntityLabel(log.entity)}${log.entity_id ? ` <span style="color:var(--purple)">#${esc(log.entity_id)}</span>` : ''}
+                        </span>
+                        <span style="color: #64748b; font-size: 0.8rem; white-space: nowrap;">
+                            🕒 ${formatAuditDate(log.created_at)}
+                        </span>
+                    </div>
+                    <div style="color: #94a3b8; font-size: 0.85rem;">
+                        Por: <strong style="color:#cbd5e1">${esc(log.user_name || 'Usuário')}</strong> (${esc(log.user_email || 'sem e-mail')})
+                    </div>
+                    ${renderAuditDetails(log.details)}
+                </div>
             </div>`).join('');
     } catch {
         el.innerHTML = '<div class="user-row-empty">Erro ao carregar logs.</div>';
