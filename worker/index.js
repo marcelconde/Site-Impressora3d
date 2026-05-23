@@ -1,9 +1,7 @@
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
-const AUDIT_VIEWER_EMAIL = 'marcel.conde@hotmail.com';
-const PBKDF2_ITERATIONS = 10_000;
 
 function cors(origin) {
-  const allowed = origin === ALLOWED_ORIGIN;
+  const allowed = origin === ALLOWED_ORIGIN || origin === 'http://localhost:3000';
   return {
     'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -33,7 +31,7 @@ async function hashPassword(password, saltHex) {
 
   const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt, iterations: 10_000, hash: 'SHA-256' },
     key, 256
   );
   return {
@@ -87,45 +85,6 @@ function tokenFromRequest(request) {
   const auth = request.headers.get('Authorization') || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7);
   return null;
-}
-
-// ── Audit helpers ─────────────────────────────────────────────────────────────
-
-function isAuditViewer(user) {
-  return user?.email?.toLowerCase() === AUDIT_VIEWER_EMAIL;
-}
-
-function getClientIp(request) {
-  return request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || '';
-}
-
-function getUserAgent(request) {
-  return request.headers.get('User-Agent') || '';
-}
-
-async function auditLog(db, request, user, action, entity, entityId = null, details = {}) {
-  await db.prepare(
-    `INSERT INTO audit_logs (user_id, user_email, user_name, action, entity, entity_id, details, ip_address, user_agent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    user?.id || null,
-    user?.email || null,
-    user?.name || null,
-    action,
-    entity,
-    entityId === undefined ? null : entityId,
-    JSON.stringify(details || {}),
-    getClientIp(request),
-    getUserAgent(request)
-  ).run();
-}
-
-async function auditLogSafe(db, request, user, action, entity, entityId = null, details = {}) {
-  try {
-    await auditLog(db, request, user, action, entity, entityId, details);
-  } catch (e) {
-    console.error('Audit log failed:', e.message);
-  }
 }
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
@@ -228,9 +187,20 @@ async function handleRequest(request, env) {
     }
 
     // ── POST /auth/setup ──────────────────────────────────────────────────────
-    // Bootstrap endpoint intentionally disabled in production.
-    if (path === '/auth/setup') {
-      return err('Setup endpoint disabled', 404, origin);
+    // Creates the very first admin user. Disabled once any user exists.
+    if (path === '/auth/setup' && request.method === 'POST') {
+      const count = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first();
+      if (count.n > 0) return err('Setup already done', 403, origin);
+
+      const { email, password, name } = await request.json();
+      if (!email || !password) return err('email e password são obrigatórios', 400, origin);
+
+      const { salt, hash } = await hashPassword(password);
+      await env.DB.prepare(
+        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
+      ).bind(email, name || 'Admin', hash, salt, 'admin').run();
+
+      return json({ ok: true, message: 'Usuário admin criado com sucesso' }, 201, origin);
     }
 
     // ── POST /auth/login ──────────────────────────────────────────────────────
@@ -248,9 +218,7 @@ async function handleRequest(request, env) {
       if (!ok) return err('Credenciais inválidas', 401, origin);
 
       const token = await createSession(env.DB, user.id);
-      const safeUser = { id: user.id, email: user.email, name: user.name, role: user.role };
-    // Audit logging temporarily disabled to restore admin access.
-      return json({ token, user: safeUser }, 200, origin);
+      return json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } }, 200, origin);
     }
 
     // ── POST /auth/logout ─────────────────────────────────────────────────────
@@ -265,66 +233,6 @@ async function handleRequest(request, env) {
       const user = await getSessionUser(env.DB, tokenFromRequest(request));
       if (!user) return err('Não autenticado', 401, origin);
       return json({ user }, 200, origin);
-    }
-
-    // ── GET /auth/audit-health ────────────────────────────────────────────────
-    if (path === '/auth/audit-health' && request.method === 'GET') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (!isAuditViewer(me)) return err('Acesso negado', 403, origin);
-
-      const table = await env.DB.prepare(
-        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'`
-      ).first();
-      const count = table
-        ? await env.DB.prepare('SELECT COUNT(*) AS n FROM audit_logs').first()
-        : { n: null };
-
-      return json({
-        ok: true,
-        worker: 'forgecon-auth',
-        audit_table_exists: !!table,
-        audit_log_count: count.n,
-        audit_viewer_email: AUDIT_VIEWER_EMAIL,
-        current_user: { id: me.id, email: me.email, name: me.name, role: me.role },
-      }, 200, origin);
-    }
-
-    // ── GET /auth/audit-logs ──────────────────────────────────────────────────
-    if (path === '/auth/audit-logs' && request.method === 'GET') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (!isAuditViewer(me)) return err('Acesso negado', 403, origin);
-
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 250);
-      const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0);
-      const { results } = await env.DB.prepare(
-        `SELECT id, user_id, user_email, user_name, action, entity, entity_id, details, ip_address, user_agent, created_at
-         FROM audit_logs
-         ORDER BY created_at DESC
-         LIMIT ? OFFSET ?`
-      ).bind(limit, offset).all();
-
-      return json({ logs: results.map(log => ({
-        ...log,
-        details: log.details ? JSON.parse(log.details) : {},
-      })) }, 200, origin);
-    }
-
-    // ── POST /auth/audit-logs ─────────────────────────────────────────────────
-    if (path === '/auth/audit-logs' && request.method === 'POST') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-
-      const { action, entity, entityId = null, details = {} } = await request.json();
-      const allowedActions = ['create', 'update', 'delete'];
-      const allowedEntities = ['product', 'category', 'gallery'];
-
-      if (!allowedActions.includes(action)) return err('Ação de auditoria inválida', 400, origin);
-      if (!allowedEntities.includes(entity)) return err('Entidade de auditoria inválida', 400, origin);
-
-      await auditLog(env.DB, request, me, action, entity, entityId, details);
-      return json({ ok: true }, 201, origin);
     }
 
     // ── POST /auth/forgot ─────────────────────────────────────────────────────
@@ -405,12 +313,6 @@ async function handleRequest(request, env) {
         'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
       ).bind(email.toLowerCase(), name || email, hash, salt, role).run();
 
-      await auditLogSafe(env.DB, request, me, 'create', 'user', result.meta.last_row_id, {
-        email: email.toLowerCase(),
-        name: name || email,
-        role,
-      });
-
       return json({ ok: true, id: result.meta.last_row_id }, 201, origin);
     }
 
@@ -424,13 +326,8 @@ async function handleRequest(request, env) {
       const targetId = parseInt(deleteMatch[1]);
       if (targetId === me.id) return err('Não é possível excluir sua própria conta', 400, origin);
 
-      const targetUser = await env.DB.prepare('SELECT id, email, name, role FROM users WHERE id = ?').bind(targetId).first();
-
       await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(targetId).run();
       await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(targetId).run();
-
-      await auditLogSafe(env.DB, request, me, 'delete', 'user', targetId, targetUser || { id: targetId });
-
       return json({ ok: true }, 200, origin);
     }
 
@@ -459,12 +356,6 @@ async function handleRequest(request, env) {
 
       const inviteLink = `${ALLOWED_ORIGIN}/admin/?invite=${token}`;
       await sendInviteEmail(env.RESEND_API_KEY, email, inviteLink, me.name);
-
-      await auditLogSafe(env.DB, request, me, 'invite', 'user', null, {
-        email: email.toLowerCase(),
-        role,
-        expires_at: expiresAt,
-      });
 
       return json({ ok: true, message: 'Convite enviado com sucesso' }, 201, origin);
     }
@@ -504,11 +395,6 @@ async function handleRequest(request, env) {
       ).bind(invite.email, name || invite.email, hash, salt, invite.role).run();
 
       await env.DB.prepare('UPDATE invites SET used_at = ? WHERE token = ?').bind(now, token).run();
-
-      await auditLogSafe(env.DB, request, { email: invite.email, name: name || invite.email, role: invite.role }, 'accept_invite', 'user', null, {
-        email: invite.email,
-        role: invite.role,
-      });
 
       return json({ ok: true, message: 'Conta criada com sucesso. Faça login para continuar.' }, 201, origin);
     }
