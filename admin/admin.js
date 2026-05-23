@@ -67,6 +67,17 @@ async function workerFetch(path, options = {}) {
     return res;
 }
 
+async function recordAdminAudit(action, entity, entityId, details = {}) {
+    try {
+        await workerFetch('/auth/audit-logs', {
+            method: 'POST',
+            body: JSON.stringify({ action, entity, entityId, details }),
+        });
+    } catch (err) {
+        console.warn('Falha ao registrar auditoria:', err);
+    }
+}
+
 function showPanel() {
     loginScreen.classList.add('hidden');
     adminPanel.classList.remove('hidden');
@@ -681,7 +692,7 @@ function validateForm() {
 }
 
 /* ── SAVE PRODUCT ───────────────────────────────────────── */
-productForm.addEventListener('submit', e => {
+productForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -705,9 +716,19 @@ productForm.addEventListener('submit', e => {
     if (editingId != null) {
         const idx = products.findIndex(p => p.id === editingId);
         if (idx !== -1) products[idx] = product;
+        await recordAdminAudit('update', 'product', product.id, {
+            name: product.name,
+            category: product.category,
+            price: product.price,
+        });
         showToast('Produto atualizado!');
     } else {
         products.push(product);
+        await recordAdminAudit('create', 'product', product.id, {
+            name: product.name,
+            category: product.category,
+            price: product.price,
+        });
         showToast('Produto adicionado!');
     }
 
@@ -745,7 +766,13 @@ confirmOverlay.addEventListener('click', e => {
 
 doDelete.addEventListener('click', () => {
     if (pendingDeleteId == null) return;
+    const deletedProduct = products.find(p => p.id === pendingDeleteId);
     products = products.filter(p => p.id !== pendingDeleteId);
+    recordAdminAudit('delete', 'product', pendingDeleteId, deletedProduct ? {
+        name: deletedProduct.name,
+        category: deletedProduct.category,
+        price: deletedProduct.price,
+    } : {});
     saveProducts();
     confirmOverlay.classList.add('hidden');
     pendingDeleteId = null;
