@@ -69,10 +69,15 @@ async function workerFetch(path, options = {}) {
 
 async function recordAdminAudit(action, entity, entityId, details = {}) {
     try {
-        await workerFetch('/auth/audit-logs', {
+        const res = await workerFetch('/auth/audit-logs', {
             method: 'POST',
             body: JSON.stringify({ action, entity, entityId, details }),
         });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            console.warn('Falha ao registrar auditoria:', data.error || `HTTP ${res.status}`);
+        }
     } catch (err) {
         console.warn('Falha ao registrar auditoria:', err);
     }
@@ -764,11 +769,11 @@ confirmOverlay.addEventListener('click', e => {
     }
 });
 
-doDelete.addEventListener('click', () => {
+doDelete.addEventListener('click', async () => {
     if (pendingDeleteId == null) return;
     const deletedProduct = products.find(p => p.id === pendingDeleteId);
     products = products.filter(p => p.id !== pendingDeleteId);
-    recordAdminAudit('delete', 'product', pendingDeleteId, deletedProduct ? {
+    await recordAdminAudit('delete', 'product', pendingDeleteId, deletedProduct ? {
         name: deletedProduct.name,
         category: deletedProduct.category,
         price: deletedProduct.price,
@@ -991,6 +996,7 @@ document.addEventListener('keydown', e => {
 function auditActionLabel(action) {
     const labels = {
         login: 'Login',
+        logout: 'Logout',
         create: 'Criou',
         update: 'Editou',
         delete: 'Removeu',
@@ -1000,9 +1006,27 @@ function auditActionLabel(action) {
     return labels[action] || action;
 }
 
+function auditEntityLabel(entity) {
+    const labels = {
+        auth: 'autenticação',
+        product: 'produto',
+        user: 'usuário',
+        category: 'categoria',
+        gallery: 'galeria',
+    };
+    return esc(labels[entity] || entity);
+}
+
 function formatAuditDate(ts) {
     if (!ts) return '—';
-    return new Date(ts * 1000).toLocaleString('pt-BR', {
+
+    const date = typeof ts === 'number'
+        ? new Date(ts * 1000)
+        : new Date(String(ts).replace(' ', 'T') + 'Z');
+
+    if (Number.isNaN(date.getTime())) return String(ts);
+
+    return date.toLocaleString('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
     });
@@ -1039,7 +1063,7 @@ async function loadAuditLogs() {
             <div class="user-row audit-row">
                 <div class="user-avatar" style="background:linear-gradient(135deg,#7c3aed,#2563eb)">${auditActionLabel(log.action)[0]}</div>
                 <div class="user-info">
-                    <div class="user-name">${auditActionLabel(log.action)} ${esc(log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</div>
+                    <div class="user-name">${auditActionLabel(log.action)} ${auditEntityLabel(log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</div>
                     <div class="user-email">${esc(log.user_name || 'Usuário')} • ${esc(log.user_email || 'sem e-mail')} • ${formatAuditDate(log.created_at)}</div>
                     <div class="user-email">${esc(auditDetailsText(log.details))}</div>
                 </div>
