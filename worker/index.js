@@ -440,5 +440,23 @@ async function handleRequest(request, env) {
     return json({ images }, 200, origin);
   }
 
+  // ── ROTA NOVA DOS LOGS DE AUDITORIA ───────────────────────────────────────────
+  if (path === '/auth/audit-logs' && request.method === 'GET') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    
+    // BLOQUEIO DE SEGURANÇA MÁXIMA: Só o Marcel entra
+    if (me.email !== 'marcel.conde@hotmail.com') {
+      return err('Acesso negado. Apenas o super-admin pode ver os logs.', 403, origin);
+    }
+
+    // Busca os últimos 100 logs do banco
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM audit_logs ORDER BY rowid DESC LIMIT 100'
+    ).all();
+    
+    return json({ logs: results }, 200, origin);
+  }
+
   return err('Not found', 404, origin);
 }
