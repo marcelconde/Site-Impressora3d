@@ -1,5 +1,5 @@
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
-/*
+
 function cors(origin) {
   const allowed = origin === ALLOWED_ORIGIN || origin === 'http://localhost:3000';
   return {
@@ -9,7 +9,7 @@ function cors(origin) {
     'Access-Control-Max-Age': '86400',
   };
 }
-*/
+
 function json(data, status = 200, origin = '') {
   return new Response(JSON.stringify(data), {
     status,
