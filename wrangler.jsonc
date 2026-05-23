@@ -1,5 +1,0 @@
-{
-  "name": "forgecon-auth",
-  "compatibility_date": "2026-05-23",
-  "main": "worker/index.js"
-}

@@ -1,5 +1,5 @@
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
-
+/*
 function cors(origin) {
   const allowed = origin === ALLOWED_ORIGIN || origin === 'http://localhost:3000';
   return {
@@ -9,7 +9,7 @@ function cors(origin) {
     'Access-Control-Max-Age': '86400',
   };
 }
-
+*/
 function json(data, status = 200, origin = '') {
   return new Response(JSON.stringify(data), {
     status,
@@ -63,7 +63,7 @@ function randomToken(bytes = 32) {
 
 async function createSession(db, userId) {
   const token = randomToken();
-  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7; // 7 days
+  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
   await db.prepare(
     'INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)'
   ).bind(token, userId, expiresAt).run();
@@ -85,6 +85,29 @@ function tokenFromRequest(request) {
   const auth = request.headers.get('Authorization') || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7);
   return null;
+}
+
+// ── Audit helpers ─────────────────────────────────────────────────────────────
+
+async function auditLogSafe(db, request, user, action, entity, entityId = null, details = {}) {
+  try {
+    await db.prepare(
+      `INSERT INTO audit_logs (user_id, user_email, user_name, action, entity, entity_id, details, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      user?.id || null,
+      user?.email || null,
+      user?.name || null,
+      action,
+      entity,
+      entityId === undefined ? null : entityId,
+      JSON.stringify(details || {}),
+      request.headers.get('CF-Connecting-IP') || '',
+      request.headers.get('User-Agent') || ''
+    ).run();
+  } catch (e) {
+    console.error('Audit log failed:', e.message);
+  }
 }
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
@@ -177,257 +200,245 @@ export default {
 };
 
 async function handleRequest(request, env) {
-    const origin = request.headers.get('Origin') || '';
-    const url = new URL(request.url);
-    const path = url.pathname;
+  const origin = request.headers.get('Origin') || '';
+  const url = new URL(request.url);
+  const path = url.pathname;
 
-    // Preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: cors(origin) });
-    }
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: cors(origin) });
+  }
 
-    // ── POST /auth/setup ──────────────────────────────────────────────────────
-    // Creates the very first admin user. Disabled once any user exists.
-    if (path === '/auth/setup' && request.method === 'POST') {
-      const count = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first();
-      if (count.n > 0) return err('Setup already done', 403, origin);
+  if (path === '/auth/setup' && request.method === 'POST') {
+    const count = await env.DB.prepare('SELECT COUNT(*) as n FROM users').first();
+    if (count.n > 0) return err('Setup already done', 403, origin);
 
-      const { email, password, name } = await request.json();
-      if (!email || !password) return err('email e password são obrigatórios', 400, origin);
+    const { email, password, name } = await request.json();
+    if (!email || !password) return err('email e password são obrigatórios', 400, origin);
 
-      const { salt, hash } = await hashPassword(password);
+    const { salt, hash } = await hashPassword(password);
+    await env.DB.prepare(
+      'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
+    ).bind(email, name || 'Admin', hash, salt, 'admin').run();
+
+    return json({ ok: true, message: 'Usuário admin criado com sucesso' }, 201, origin);
+  }
+
+  if (path === '/auth/login' && request.method === 'POST') {
+    const { email, password } = await request.json();
+    if (!email || !password) return err('Credenciais inválidas', 400, origin);
+
+    const user = await env.DB.prepare(
+      'SELECT id, email, name, role, password_hash, password_salt FROM users WHERE email = ?'
+    ).bind(email.toLowerCase()).first();
+
+    if (!user) return err('Credenciais inválidas', 401, origin);
+
+    const ok = await verifyPassword(password, user.password_salt, user.password_hash);
+    if (!ok) return err('Credenciais inválidas', 401, origin);
+
+    const token = await createSession(env.DB, user.id);
+    const safeUser = { id: user.id, email: user.email, name: user.name, role: user.role };
+
+    await auditLogSafe(env.DB, request, safeUser, 'login', 'auth', user.id, {
+      email: user.email,
+    });
+
+    return json({ token, user: safeUser }, 200, origin);
+  }
+
+  if (path === '/auth/logout' && request.method === 'POST') {
+    const token = tokenFromRequest(request);
+    if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+    return json({ ok: true }, 200, origin);
+  }
+
+  if (path === '/auth/me' && request.method === 'GET') {
+    const user = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!user) return err('Não autenticado', 401, origin);
+    return json({ user }, 200, origin);
+  }
+
+  if (path === '/auth/forgot' && request.method === 'POST') {
+    const { email } = await request.json();
+    if (!email) return err('email é obrigatório', 400, origin);
+
+    const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
+
+    if (user) {
+      const resetToken = randomToken();
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
       await env.DB.prepare(
-        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
-      ).bind(email, name || 'Admin', hash, salt, 'admin').run();
+        'INSERT INTO reset_tokens (token, user_id, expires_at) VALUES (?, ?, ?)'
+      ).bind(resetToken, user.id, expiresAt).run();
 
-      return json({ ok: true, message: 'Usuário admin criado com sucesso' }, 201, origin);
+      const resetLink = `${ALLOWED_ORIGIN}/admin/?reset=${resetToken}`;
+      await sendResetEmail(env.RESEND_API_KEY, email, resetLink);
     }
 
-    // ── POST /auth/login ──────────────────────────────────────────────────────
-    if (path === '/auth/login' && request.method === 'POST') {
-      const { email, password } = await request.json();
-      if (!email || !password) return err('Credenciais inválidas', 400, origin);
+    return json({ ok: true, message: 'Se este email existir, você receberá as instruções.' }, 200, origin);
+  }
 
-      const user = await env.DB.prepare(
-        'SELECT id, email, name, role, password_hash, password_salt FROM users WHERE email = ?'
-      ).bind(email.toLowerCase()).first();
+  if (path === '/auth/reset' && request.method === 'POST') {
+    const { token, password } = await request.json();
+    if (!token || !password) return err('token e password são obrigatórios', 400, origin);
 
-      if (!user) return err('Credenciais inválidas', 401, origin);
+    const now = Math.floor(Date.now() / 1000);
+    const row = await env.DB.prepare(
+      'SELECT user_id FROM reset_tokens WHERE token = ? AND expires_at > ? AND used_at IS NULL'
+    ).bind(token, now).first();
 
-      const ok = await verifyPassword(password, user.password_salt, user.password_hash);
-      if (!ok) return err('Credenciais inválidas', 401, origin);
+    if (!row) return err('Token inválido ou expirado', 400, origin);
 
-      const token = await createSession(env.DB, user.id);
-      return json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } }, 200, origin);
-    }
+    const { salt, hash } = await hashPassword(password);
+    await env.DB.prepare(
+      'UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?'
+    ).bind(hash, salt, row.user_id).run();
 
-    // ── POST /auth/logout ─────────────────────────────────────────────────────
-    if (path === '/auth/logout' && request.method === 'POST') {
-      const token = tokenFromRequest(request);
-      if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
-      return json({ ok: true }, 200, origin);
-    }
+    await env.DB.prepare(
+      'UPDATE reset_tokens SET used_at = ? WHERE token = ?'
+    ).bind(now, token).run();
 
-    // ── GET /auth/me ──────────────────────────────────────────────────────────
-    if (path === '/auth/me' && request.method === 'GET') {
-      const user = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!user) return err('Não autenticado', 401, origin);
-      return json({ user }, 200, origin);
-    }
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.user_id).run();
 
-    // ── POST /auth/forgot ─────────────────────────────────────────────────────
-    if (path === '/auth/forgot' && request.method === 'POST') {
-      const { email } = await request.json();
-      if (!email) return err('email é obrigatório', 400, origin);
+    return json({ ok: true, message: 'Senha redefinida com sucesso' }, 200, origin);
+  }
 
-      const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
+  if (path === '/auth/users' && request.method === 'GET') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    if (me.role !== 'admin') return err('Acesso negado', 403, origin);
 
-      // Always return 200 to prevent email enumeration
-      if (user) {
-        const resetToken = randomToken();
-        const expiresAt = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-        await env.DB.prepare(
-          'INSERT INTO reset_tokens (token, user_id, expires_at) VALUES (?, ?, ?)'
-        ).bind(resetToken, user.id, expiresAt).run();
+    const { results } = await env.DB.prepare(
+      'SELECT id, email, name, role, created_at FROM users ORDER BY created_at ASC'
+    ).all();
+    return json({ users: results }, 200, origin);
+  }
 
-        const resetLink = `${ALLOWED_ORIGIN}/admin/?reset=${resetToken}`;
-        await sendResetEmail(env.RESEND_API_KEY, email, resetLink);
-      }
+  if (path === '/auth/users' && request.method === 'POST') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    if (me.role !== 'admin') return err('Acesso negado', 403, origin);
 
-      return json({ ok: true, message: 'Se este email existir, você receberá as instruções.' }, 200, origin);
-    }
+    const { email, password, name, role = 'editor' } = await request.json();
+    if (!email || !password) return err('email e password são obrigatórios', 400, origin);
 
-    // ── POST /auth/reset ──────────────────────────────────────────────────────
-    if (path === '/auth/reset' && request.method === 'POST') {
-      const { token, password } = await request.json();
-      if (!token || !password) return err('token e password são obrigatórios', 400, origin);
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
+    if (existing) return err('Email já cadastrado', 409, origin);
 
-      const now = Math.floor(Date.now() / 1000);
-      const row = await env.DB.prepare(
-        'SELECT user_id FROM reset_tokens WHERE token = ? AND expires_at > ? AND used_at IS NULL'
-      ).bind(token, now).first();
+    const { salt, hash } = await hashPassword(password);
+    const result = await env.DB.prepare(
+      'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
+    ).bind(email.toLowerCase(), name || email, hash, salt, role).run();
 
-      if (!row) return err('Token inválido ou expirado', 400, origin);
+    return json({ ok: true, id: result.meta.last_row_id }, 201, origin);
+  }
 
-      const { salt, hash } = await hashPassword(password);
-      await env.DB.prepare(
-        'UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?'
-      ).bind(hash, salt, row.user_id).run();
+  const deleteMatch = path.match(/^\/auth\/users\/(\d+)$/);
+  if (deleteMatch && request.method === 'DELETE') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    if (me.role !== 'admin') return err('Acesso negado', 403, origin);
 
-      await env.DB.prepare(
-        'UPDATE reset_tokens SET used_at = ? WHERE token = ?'
-      ).bind(now, token).run();
+    const targetId = parseInt(deleteMatch[1]);
+    if (targetId === me.id) return err('Não é possível excluir sua própria conta', 400, origin);
 
-      // Invalidate all sessions for this user
-      await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.user_id).run();
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(targetId).run();
+    await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(targetId).run();
+    return json({ ok: true }, 200, origin);
+  }
 
-      return json({ ok: true, message: 'Senha redefinida com sucesso' }, 200, origin);
-    }
+  if (path === '/auth/invite' && request.method === 'POST') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    if (me.role !== 'admin') return err('Acesso negado', 403, origin);
 
-    // ── GET /auth/users ───────────────────────────────────────────────────────
-    if (path === '/auth/users' && request.method === 'GET') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+    const { email, role = 'admin' } = await request.json();
+    if (!email) return err('email é obrigatório', 400, origin);
 
-      const { results } = await env.DB.prepare(
-        'SELECT id, email, name, role, created_at FROM users ORDER BY created_at ASC'
-      ).all();
-      return json({ users: results }, 200, origin);
-    }
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
+    if (existing) return err('Este email já possui uma conta', 409, origin);
 
-    // ── POST /auth/users ──────────────────────────────────────────────────────
-    if (path === '/auth/users' && request.method === 'POST') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+    const pending = await env.DB.prepare(
+      'SELECT token FROM invites WHERE email = ? AND used_at IS NULL AND expires_at > ?'
+    ).bind(email.toLowerCase(), Math.floor(Date.now() / 1000)).first();
+    if (pending) return err('Já existe um convite pendente para este email', 409, origin);
 
-      const { email, password, name, role = 'editor' } = await request.json();
-      if (!email || !password) return err('email e password são obrigatórios', 400, origin);
+    const token = randomToken();
+    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 48;
+    await env.DB.prepare(
+      'INSERT INTO invites (token, email, role, expires_at) VALUES (?, ?, ?, ?)'
+    ).bind(token, email.toLowerCase(), role, expiresAt).run();
 
-      const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
-      if (existing) return err('Email já cadastrado', 409, origin);
+    const inviteLink = `${ALLOWED_ORIGIN}/admin/?invite=${token}`;
+    await sendInviteEmail(env.RESEND_API_KEY, email, inviteLink, me.name);
 
-      const { salt, hash } = await hashPassword(password);
-      const result = await env.DB.prepare(
-        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
-      ).bind(email.toLowerCase(), name || email, hash, salt, role).run();
+    return json({ ok: true, message: 'Convite enviado com sucesso' }, 201, origin);
+  }
 
-      return json({ ok: true, id: result.meta.last_row_id }, 201, origin);
-    }
+  if (path === '/auth/invite' && request.method === 'GET') {
+    const token = url.searchParams.get('token');
+    if (!token) return err('token é obrigatório', 400, origin);
 
-    // ── DELETE /auth/users/:id ────────────────────────────────────────────────
-    const deleteMatch = path.match(/^\/auth\/users\/(\d+)$/);
-    if (deleteMatch && request.method === 'DELETE') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+    const now = Math.floor(Date.now() / 1000);
+    const invite = await env.DB.prepare(
+      'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
+    ).bind(token, now).first();
 
-      const targetId = parseInt(deleteMatch[1]);
-      if (targetId === me.id) return err('Não é possível excluir sua própria conta', 400, origin);
+    if (!invite) return err('Convite inválido ou expirado', 400, origin);
+    return json({ email: invite.email, role: invite.role }, 200, origin);
+  }
 
-      await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(targetId).run();
-      await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(targetId).run();
-      return json({ ok: true }, 200, origin);
-    }
+  if (path === '/auth/invite/accept' && request.method === 'POST') {
+    const { token, password, name } = await request.json();
+    if (!token || !password) return err('token e password são obrigatórios', 400, origin);
 
-    // ── POST /auth/invite ─────────────────────────────────────────────────────
-    if (path === '/auth/invite' && request.method === 'POST') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
+    const now = Math.floor(Date.now() / 1000);
+    const invite = await env.DB.prepare(
+      'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
+    ).bind(token, now).first();
 
-      const { email, role = 'admin' } = await request.json();
-      if (!email) return err('email é obrigatório', 400, origin);
+    if (!invite) return err('Convite inválido ou expirado', 400, origin);
 
-      const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
-      if (existing) return err('Este email já possui uma conta', 409, origin);
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(invite.email).first();
+    if (existing) return err('Este email já possui uma conta', 409, origin);
 
-      const pending = await env.DB.prepare(
-        'SELECT token FROM invites WHERE email = ? AND used_at IS NULL AND expires_at > ?'
-      ).bind(email.toLowerCase(), Math.floor(Date.now() / 1000)).first();
-      if (pending) return err('Já existe um convite pendente para este email', 409, origin);
+    const { salt, hash } = await hashPassword(password);
+    await env.DB.prepare(
+      'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
+    ).bind(invite.email, name || invite.email, hash, salt, invite.role).run();
 
-      const token = randomToken();
-      const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 48; // 48 horas
-      await env.DB.prepare(
-        'INSERT INTO invites (token, email, role, expires_at) VALUES (?, ?, ?, ?)'
-      ).bind(token, email.toLowerCase(), role, expiresAt).run();
+    await env.DB.prepare('UPDATE invites SET used_at = ? WHERE token = ?').bind(now, token).run();
 
-      const inviteLink = `${ALLOWED_ORIGIN}/admin/?invite=${token}`;
-      await sendInviteEmail(env.RESEND_API_KEY, email, inviteLink, me.name);
+    return json({ ok: true, message: 'Conta criada com sucesso. Faça login para continuar.' }, 201, origin);
+  }
 
-      return json({ ok: true, message: 'Convite enviado com sucesso' }, 201, origin);
-    }
+  if (path === '/auth/invites' && request.method === 'GET') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
+    if (me.role !== 'admin') return err('Acesso negado', 403, origin);
 
-    // ── GET /auth/invite?token=X ──────────────────────────────────────────────
-    if (path === '/auth/invite' && request.method === 'GET') {
-      const token = url.searchParams.get('token');
-      if (!token) return err('token é obrigatório', 400, origin);
+    const now = Math.floor(Date.now() / 1000);
+    const { results } = await env.DB.prepare(
+      'SELECT token, email, role, expires_at, used_at, created_at FROM invites ORDER BY created_at DESC'
+    ).all();
+    return json({ invites: results.map(i => ({ ...i, expired: !i.used_at && i.expires_at < now })) }, 200, origin);
+  }
 
-      const now = Math.floor(Date.now() / 1000);
-      const invite = await env.DB.prepare(
-        'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
-      ).bind(token, now).first();
+  if (path === '/cloudinary/list' && request.method === 'GET') {
+    const me = await getSessionUser(env.DB, tokenFromRequest(request));
+    if (!me) return err('Não autenticado', 401, origin);
 
-      if (!invite) return err('Convite inválido ou expirado', 400, origin);
-      return json({ email: invite.email, role: invite.role }, 200, origin);
-    }
+    const folder = url.searchParams.get('folder') || 'Produtos';
+    const images = await listCloudinaryFolder(
+      env.CLOUDINARY_CLOUD_NAME,
+      env.CLOUDINARY_API_KEY,
+      env.CLOUDINARY_API_SECRET,
+      folder
+    );
 
-    // ── POST /auth/invite/accept ──────────────────────────────────────────────
-    if (path === '/auth/invite/accept' && request.method === 'POST') {
-      const { token, password, name } = await request.json();
-      if (!token || !password) return err('token e password são obrigatórios', 400, origin);
+    if (images === null) return err('Erro ao buscar imagens do Cloudinary', 502, origin);
+    return json({ images }, 200, origin);
+  }
 
-      const now = Math.floor(Date.now() / 1000);
-      const invite = await env.DB.prepare(
-        'SELECT email, role FROM invites WHERE token = ? AND expires_at > ? AND used_at IS NULL'
-      ).bind(token, now).first();
-
-      if (!invite) return err('Convite inválido ou expirado', 400, origin);
-
-      const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(invite.email).first();
-      if (existing) return err('Este email já possui uma conta', 409, origin);
-
-      const { salt, hash } = await hashPassword(password);
-      await env.DB.prepare(
-        'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
-      ).bind(invite.email, name || invite.email, hash, salt, invite.role).run();
-
-      await env.DB.prepare('UPDATE invites SET used_at = ? WHERE token = ?').bind(now, token).run();
-
-      return json({ ok: true, message: 'Conta criada com sucesso. Faça login para continuar.' }, 201, origin);
-    }
-
-    // ── GET /auth/invites ─────────────────────────────────────────────────────
-    if (path === '/auth/invites' && request.method === 'GET') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-      if (me.role !== 'admin') return err('Acesso negado', 403, origin);
-
-      const now = Math.floor(Date.now() / 1000);
-      const { results } = await env.DB.prepare(
-        'SELECT token, email, role, expires_at, used_at, created_at FROM invites ORDER BY created_at DESC'
-      ).all();
-      return json({ invites: results.map(i => ({ ...i, expired: !i.used_at && i.expires_at < now })) }, 200, origin);
-    }
-
-    // ── GET /cloudinary/list?folder=X ─────────────────────────────────────────
-    if (path === '/cloudinary/list' && request.method === 'GET') {
-      const me = await getSessionUser(env.DB, tokenFromRequest(request));
-      if (!me) return err('Não autenticado', 401, origin);
-
-      const folder = url.searchParams.get('folder') || 'Produtos';
-      const images = await listCloudinaryFolder(
-        env.CLOUDINARY_CLOUD_NAME,
-        env.CLOUDINARY_API_KEY,
-        env.CLOUDINARY_API_SECRET,
-        folder
-      );
-
-      if (images === null) return err('Erro ao buscar imagens do Cloudinary', 502, origin);
-      return json({ images }, 200, origin);
-    }
-
-    return err('Not found', 404, origin);
+  return err('Not found', 404, origin);
 }
