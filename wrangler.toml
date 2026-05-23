@@ -1,0 +1,8 @@
+name = "forgecon-auth"
+main = "worker/index.js"
+compatibility_date = "2025-05-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "forgecon-db"
+database_id = "COLE_AQUI_O_DATABASE_ID"
