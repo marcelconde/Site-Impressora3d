@@ -16,6 +16,7 @@ let editingId = null;
 let pendingDeleteId = null;
 let currentColors = [];
 let extraImages = [];
+let auditPollTimer = null;
 
 /* ── STORAGE ────────────────────────────────────────────── */
 function loadProducts() {
@@ -86,12 +87,14 @@ async function recordAdminAudit(action, entity, entityId, details = {}) {
 function showPanel() {
     loginScreen.classList.add('hidden');
     adminPanel.classList.remove('hidden');
+    setupAuditView();
     loadProducts();
     renderGrid();
     updateStats();
 }
 
 function showLogin() {
+    stopAuditPolling();
     sessionStorage.removeItem('forgecon_token');
     adminPanel.classList.add('hidden');
     loginScreen.classList.remove('hidden');
@@ -811,7 +814,12 @@ document.getElementById('adminNav').addEventListener('click', e => {
     const auditView = document.getElementById('auditView');
     if (auditView) auditView.classList.toggle('hidden', view !== 'audit');
     if (view === 'users') loadUsersView();
-    if (view === 'audit') loadAuditLogs();
+    if (view === 'audit') {
+        loadAuditLogs();
+        startAuditPolling();
+    } else {
+        stopAuditPolling();
+    }
 });
 
 /* ── USERS & INVITES VIEW ───────────────────────────────── */
@@ -992,6 +1000,60 @@ document.addEventListener('keydown', e => {
 });
 
 
+function setupAuditView() {
+    const nav = document.getElementById('adminNav');
+    const panel = document.getElementById('adminPanel');
+
+    if (!nav || !panel) return;
+
+    if (!document.querySelector('.admin-nav-tab[data-view="audit"]')) {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'admin-nav-tab';
+        tab.dataset.view = 'audit';
+        tab.textContent = 'Logs e Auditoria';
+        nav.appendChild(tab);
+    }
+
+    if (!document.getElementById('auditView')) {
+        const view = document.createElement('section');
+        view.id = 'auditView';
+        view.className = 'admin-view hidden';
+        view.innerHTML = `
+            <div class="content-head">
+                <div>
+                    <h2>Logs e Auditoria</h2>
+                    <p id="auditSubtitle">Acompanhe logins, convites e alterações feitas no painel.</p>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="refreshAuditBtn">Atualizar</button>
+            </div>
+            <div class="users-card">
+                <div id="auditList" class="users-list">
+                    <div class="user-row-empty">Abra esta aba para carregar os logs.</div>
+                </div>
+            </div>
+        `;
+        panel.appendChild(view);
+
+        document.getElementById('refreshAuditBtn')?.addEventListener('click', () => loadAuditLogs());
+    }
+}
+
+function startAuditPolling() {
+    stopAuditPolling();
+    auditPollTimer = setInterval(() => {
+        const auditView = document.getElementById('auditView');
+        if (auditView && !auditView.classList.contains('hidden')) loadAuditLogs(false);
+    }, 5000);
+}
+
+function stopAuditPolling() {
+    if (auditPollTimer) {
+        clearInterval(auditPollTimer);
+        auditPollTimer = null;
+    }
+}
+
 /* ── AUDIT VIEW ─────────────────────────────────────────── */
 function auditActionLabel(action) {
     const labels = {
@@ -1039,11 +1101,11 @@ function auditDetailsText(details) {
         .join(' • ');
 }
 
-async function loadAuditLogs() {
+async function loadAuditLogs(showLoading = true) {
     const el = document.getElementById('auditList');
     if (!el) return;
 
-    el.innerHTML = '<div class="user-row-empty">Carregando logs...</div>';
+    if (showLoading) el.innerHTML = '<div class="user-row-empty">Carregando logs...</div>';
 
     try {
         const res = await workerFetch('/auth/audit-logs?limit=100');
@@ -1059,6 +1121,9 @@ async function loadAuditLogs() {
             return;
         }
 
+        const subtitle = document.getElementById('auditSubtitle');
+        if (subtitle) subtitle.textContent = `${data.logs.length} evento(s) recentes. Atualização automática a cada 5 segundos.`;
+
         el.innerHTML = data.logs.map(log => `
             <div class="user-row audit-row">
                 <div class="user-avatar" style="background:linear-gradient(135deg,#7c3aed,#2563eb)">${auditActionLabel(log.action)[0]}</div>
@@ -1073,3 +1138,5 @@ async function loadAuditLogs() {
         el.innerHTML = '<div class="user-row-empty">Erro ao carregar logs.</div>';
     }
 }
+
+window.addEventListener('beforeunload', stopAuditPolling);
