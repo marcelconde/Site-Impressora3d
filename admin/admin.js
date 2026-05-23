@@ -776,7 +776,10 @@ document.getElementById('adminNav').addEventListener('click', e => {
     document.getElementById('catalogView').classList.toggle('hidden', view !== 'catalog');
     document.getElementById('calcView').classList.toggle('hidden', view !== 'calc');
     document.getElementById('usersView').classList.toggle('hidden', view !== 'users');
+    const auditView = document.getElementById('auditView');
+    if (auditView) auditView.classList.toggle('hidden', view !== 'audit');
     if (view === 'users') loadUsersView();
+    if (view === 'audit') loadAuditLogs();
 });
 
 /* ── USERS & INVITES VIEW ───────────────────────────────── */
@@ -955,3 +958,67 @@ document.addEventListener('keydown', e => {
         }
     }
 });
+
+
+/* ── AUDIT VIEW ─────────────────────────────────────────── */
+function auditActionLabel(action) {
+    const labels = {
+        login: 'Login',
+        create: 'Criou',
+        update: 'Editou',
+        delete: 'Removeu',
+        invite: 'Convidou',
+        accept_invite: 'Aceitou convite',
+    };
+    return labels[action] || action;
+}
+
+function formatAuditDate(ts) {
+    if (!ts) return '—';
+    return new Date(ts * 1000).toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    });
+}
+
+function auditDetailsText(details) {
+    if (!details || typeof details !== 'object') return '';
+    return Object.entries(details)
+        .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
+        .join(' • ');
+}
+
+async function loadAuditLogs() {
+    const el = document.getElementById('auditList');
+    if (!el) return;
+
+    el.innerHTML = '<div class="user-row-empty">Carregando logs...</div>';
+
+    try {
+        const res = await workerFetch('/auth/audit-logs?limit=100');
+        const data = await res.json();
+
+        if (!res.ok) {
+            el.innerHTML = `<div class="user-row-empty">${data.error || 'Acesso negado'}</div>`;
+            return;
+        }
+
+        if (!data.logs.length) {
+            el.innerHTML = '<div class="user-row-empty">Nenhum log registrado ainda.</div>';
+            return;
+        }
+
+        el.innerHTML = data.logs.map(log => `
+            <div class="user-row audit-row">
+                <div class="user-avatar" style="background:linear-gradient(135deg,#7c3aed,#2563eb)">${auditActionLabel(log.action)[0]}</div>
+                <div class="user-info">
+                    <div class="user-name">${auditActionLabel(log.action)} ${esc(log.entity)}${log.entity_id ? ` #${esc(log.entity_id)}` : ''}</div>
+                    <div class="user-email">${esc(log.user_name || 'Usuário')} • ${esc(log.user_email || 'sem e-mail')} • ${formatAuditDate(log.created_at)}</div>
+                    <div class="user-email">${esc(auditDetailsText(log.details))}</div>
+                </div>
+                <span class="user-badge badge-admin">${esc(log.action)}</span>
+            </div>`).join('');
+    } catch {
+        el.innerHTML = '<div class="user-row-empty">Erro ao carregar logs.</div>';
+    }
+}
