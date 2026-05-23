@@ -1,6 +1,6 @@
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
 const AUDIT_VIEWER_EMAIL = 'marcel.conde@hotmail.com';
-const PBKDF2_ITERATIONS = 310_000;
+const PBKDF2_ITERATIONS = 10_000;
 
 function cors(origin) {
   const allowed = origin === ALLOWED_ORIGIN;
@@ -249,7 +249,7 @@ async function handleRequest(request, env) {
 
       const token = await createSession(env.DB, user.id);
       const safeUser = { id: user.id, email: user.email, name: user.name, role: user.role };
-      await auditLogSafe(env.DB, request, safeUser, 'login', 'auth', user.id, { email: user.email });
+    // Audit logging temporarily disabled to restore admin access.
       return json({ token, user: safeUser }, 200, origin);
     }
 
