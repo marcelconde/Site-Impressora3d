@@ -8,7 +8,7 @@ function cors(origin) {
     'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Max-Age': '86400',
+    'Access-Control-Max-Age': '86400',
   };
 }
 
@@ -118,6 +118,14 @@ async function auditLog(db, request, user, action, entity, entityId = null, deta
     getClientIp(request),
     getUserAgent(request)
   ).run();
+}
+
+async function auditLogSafe(db, request, user, action, entity, entityId = null, details = {}) {
+  try {
+    await auditLog(db, request, user, action, entity, entityId, details);
+  } catch (e) {
+    console.error('Audit log failed:', e.message);
+  }
 }
 
 // ── Email via Resend ──────────────────────────────────────────────────────────
@@ -241,7 +249,7 @@ async function handleRequest(request, env) {
 
       const token = await createSession(env.DB, user.id);
       const safeUser = { id: user.id, email: user.email, name: user.name, role: user.role };
-      await auditLog(env.DB, request, safeUser, 'login', 'auth', user.id, { email: user.email });
+      await auditLogSafe(env.DB, request, safeUser, 'login', 'auth', user.id, { email: user.email });
       return json({ token, user: safeUser }, 200, origin);
     }
 
@@ -257,6 +265,29 @@ async function handleRequest(request, env) {
       const user = await getSessionUser(env.DB, tokenFromRequest(request));
       if (!user) return err('Não autenticado', 401, origin);
       return json({ user }, 200, origin);
+    }
+
+    // ── GET /auth/audit-health ────────────────────────────────────────────────
+    if (path === '/auth/audit-health' && request.method === 'GET') {
+      const me = await getSessionUser(env.DB, tokenFromRequest(request));
+      if (!me) return err('Não autenticado', 401, origin);
+      if (!isAuditViewer(me)) return err('Acesso negado', 403, origin);
+
+      const table = await env.DB.prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_logs'`
+      ).first();
+      const count = table
+        ? await env.DB.prepare('SELECT COUNT(*) AS n FROM audit_logs').first()
+        : { n: null };
+
+      return json({
+        ok: true,
+        worker: 'forgecon-auth',
+        audit_table_exists: !!table,
+        audit_log_count: count.n,
+        audit_viewer_email: AUDIT_VIEWER_EMAIL,
+        current_user: { id: me.id, email: me.email, name: me.name, role: me.role },
+      }, 200, origin);
     }
 
     // ── GET /auth/audit-logs ──────────────────────────────────────────────────
@@ -374,7 +405,7 @@ async function handleRequest(request, env) {
         'INSERT INTO users (email, name, password_hash, password_salt, role) VALUES (?, ?, ?, ?, ?)'
       ).bind(email.toLowerCase(), name || email, hash, salt, role).run();
 
-      await auditLog(env.DB, request, me, 'create', 'user', result.meta.last_row_id, {
+      await auditLogSafe(env.DB, request, me, 'create', 'user', result.meta.last_row_id, {
         email: email.toLowerCase(),
         name: name || email,
         role,
@@ -398,7 +429,7 @@ async function handleRequest(request, env) {
       await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(targetId).run();
       await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(targetId).run();
 
-      await auditLog(env.DB, request, me, 'delete', 'user', targetId, targetUser || { id: targetId });
+      await auditLogSafe(env.DB, request, me, 'delete', 'user', targetId, targetUser || { id: targetId });
 
       return json({ ok: true }, 200, origin);
     }
@@ -429,7 +460,7 @@ async function handleRequest(request, env) {
       const inviteLink = `${ALLOWED_ORIGIN}/admin/?invite=${token}`;
       await sendInviteEmail(env.RESEND_API_KEY, email, inviteLink, me.name);
 
-      await auditLog(env.DB, request, me, 'invite', 'user', null, {
+      await auditLogSafe(env.DB, request, me, 'invite', 'user', null, {
         email: email.toLowerCase(),
         role,
         expires_at: expiresAt,
@@ -474,7 +505,7 @@ async function handleRequest(request, env) {
 
       await env.DB.prepare('UPDATE invites SET used_at = ? WHERE token = ?').bind(now, token).run();
 
-      await auditLog(env.DB, request, { email: invite.email, name: name || invite.email, role: invite.role }, 'accept_invite', 'user', null, {
+      await auditLogSafe(env.DB, request, { email: invite.email, name: name || invite.email, role: invite.role }, 'accept_invite', 'user', null, {
         email: invite.email,
         role: invite.role,
       });
@@ -514,6 +545,3 @@ async function handleRequest(request, env) {
 
     return err('Not found', 404, origin);
 }
-git add .
-git commit -m "Add audit logging to worker"
-git push origin main
