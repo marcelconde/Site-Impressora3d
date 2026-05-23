@@ -5,4 +5,4 @@ compatibility_date = "2025-05-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "forgecon-db"
-database_id = "COLE_AQUI_O_DATABASE_ID"
+database_id = "d29af0d6-23a8-4d03-95ad-0b12dcfb0bd4"
