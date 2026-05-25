@@ -1,24 +1,31 @@
-const CACHE_VERSION = 'forgecon-v1';
+// Mudamos o nome para forçar o navegador a perceber que teve atualização
+const CACHE_NAME = 'forgecon-sem-cache-v1';
 
-self.addEventListener('install', () => self.skipWaiting());
-
-self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys()
-            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
-            .then(() => self.clients.claim())
-    );
+// Força a instalação imediata do novo Service Worker
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
 });
 
-self.addEventListener('fetch', event => {
-    if (event.request.method !== 'GET') return;
+// Assim que ativar, apaga TODOS os caches antigos que estavam travando seu site
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    return caches.delete(cacheName);
+                })
+            );
+        })
+    );
+    self.clients.claim();
+});
+
+// Intercepta as requisições e manda buscar direto da internet (rede) sempre, ignorando o cache
+self.addEventListener('fetch', (event) => {
     event.respondWith(
-        fetch(event.request)
-            .then(res => {
-                const copy = res.clone();
-                caches.open(CACHE_VERSION).then(c => c.put(event.request, copy));
-                return res;
-            })
-            .catch(() => caches.match(event.request))
+        fetch(event.request).catch((error) => {
+            console.error('Erro de rede no Service Worker:', error);
+            throw error;
+        })
     );
 });
