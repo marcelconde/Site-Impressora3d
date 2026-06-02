@@ -65,8 +65,18 @@ async function workerFetch(path, options = {}) {
     const token = getToken();
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(CONFIG.workerUrl + path, { ...options, headers });
-    return res;
+    return fetchWithTimeout(CONFIG.workerUrl + path, { ...options, headers });
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 // ── AUDITORIA DO FRONTEND ENVIADA PARA O BACKEND ──
@@ -125,7 +135,7 @@ loginForm.addEventListener('submit', async e => {
     loginBtn.textContent = 'Entrando...';
     loginError.textContent = '';
     try {
-        const res = await fetch(CONFIG.workerUrl + '/auth/login', {
+        const res = await fetchWithTimeout(CONFIG.workerUrl + '/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: loginEmail.value.trim(), password: loginPw.value }),
@@ -140,8 +150,10 @@ loginForm.addEventListener('submit', async e => {
             loginPw.value = '';
             loginPw.focus();
         }
-    } catch {
-        loginError.textContent = 'Erro de conexão. Tente novamente.';
+    } catch (error) {
+        loginError.textContent = error.name === 'AbortError'
+            ? 'Servidor de login demorou para responder. Verifique o Worker no Cloudflare.'
+            : 'Erro de conexão. Tente novamente.';
     } finally {
         loginBtn.disabled = false;
         loginBtn.textContent = 'Entrar';
