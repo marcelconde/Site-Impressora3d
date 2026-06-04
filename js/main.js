@@ -773,6 +773,7 @@ window.configurarSite = function(config = {}) {
         instagram, shopee, mercadolivre,
         whatsapp, email, nome
     } = config;
+    const whatsappMessage = 'Olá, vim pelo site e gostaria de solicitar um orçamento';
 
     const clean = value => typeof value === 'string' ? value.trim() : '';
     const normalizeInstagram = value => {
@@ -796,7 +797,7 @@ window.configurarSite = function(config = {}) {
         const raw = clean(value);
         const digits = raw.replace(/\D/g, '');
         if (!digits) return '';
-        return `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`;
+        return `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}?text=${encodeURIComponent(whatsappMessage)}`;
     };
 
     const update = (id, href) => {
@@ -825,10 +826,11 @@ window.configurarSite = function(config = {}) {
         update('ml-mercadolivre', mercadolivre);
     }
     if (whatsapp) {
+        const whatsappUrl = normalizeWhatsapp(whatsapp);
+        update('footer-whatsapp', whatsappUrl);
         const el = document.getElementById('contact-whatsapp');
         if (el) {
             el.textContent = whatsapp;
-            const whatsappUrl = normalizeWhatsapp(whatsapp);
             if (whatsappUrl) el.href = whatsappUrl;
         }
     }
