@@ -228,7 +228,7 @@ section { position: relative; }
     width: 0;
     background: linear-gradient(90deg, var(--purple), var(--cyan));
     border-radius: var(--r-full);
-    animation: barLoad 1.8s ease-in-out forwards;
+    animation: barLoad .75s ease-in-out forwards;
 }
 @keyframes barLoad { to { width: 100%; } }
 

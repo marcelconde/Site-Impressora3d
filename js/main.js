@@ -88,7 +88,7 @@ window.addEventListener('load', () => {
         if (!pre) return;
         pre.classList.add('hide');
         pre.addEventListener('transitionend', () => pre.remove(), { once: true });
-    }, 2000);
+    }, 850);
 });
 
 /* =============================================
