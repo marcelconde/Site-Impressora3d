@@ -85,6 +85,7 @@ const TESTIMONIALS = [
 window.addEventListener('load', () => {
     setTimeout(() => {
         const pre = document.getElementById('preloader');
+        if (!pre) return;
         pre.classList.add('hide');
         pre.addEventListener('transitionend', () => pre.remove(), { once: true });
     }, 2000);
@@ -97,20 +98,21 @@ const navbar  = document.getElementById('navbar');
 const toggle  = document.getElementById('navToggle');
 const navList = document.getElementById('navLinks');
 const navLinks = document.querySelectorAll('.nav-link');
+const backTopBtn = document.getElementById('backTop');
 
 window.addEventListener('scroll', () => {
-    navbar.classList.toggle('scrolled', window.scrollY > 40);
-    document.getElementById('backTop').classList.toggle('visible', window.scrollY > 400);
+    if (navbar) navbar.classList.toggle('scrolled', window.scrollY > 40);
+    if (backTopBtn) backTopBtn.classList.toggle('visible', window.scrollY > 400);
 }, { passive: true });
 
-toggle.addEventListener('click', () => {
+if (toggle && navList) toggle.addEventListener('click', () => {
     const open = navList.classList.toggle('mobile-open');
     toggle.classList.toggle('open', open);
     toggle.setAttribute('aria-expanded', open);
     document.body.classList.toggle('no-scroll', open);
 });
 
-navList.addEventListener('click', e => {
+if (navList && toggle) navList.addEventListener('click', e => {
     if (e.target.classList.contains('nav-link')) {
         navList.classList.remove('mobile-open');
         toggle.classList.remove('open');
@@ -125,11 +127,23 @@ const sectionObserver = new IntersectionObserver(entries => {
     entries.forEach(e => {
         if (e.isIntersecting) {
             const id = e.target.id;
-            navLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === `#${id}`));
+            navLinks.forEach(l => {
+                const href = l.getAttribute('href') || '';
+                if (href.startsWith('#')) l.classList.toggle('active', href === `#${id}`);
+            });
         }
     });
 }, { threshold: .35 });
 sections.forEach(s => sectionObserver.observe(s));
+
+const currentPage = window.location.pathname === '/' ? '/' : window.location.pathname;
+navLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (href && !href.startsWith('#')) {
+        const path = new URL(href, window.location.origin).pathname;
+        link.classList.toggle('active', path === currentPage);
+    }
+});
 
 /* =============================================
    HERO CANVAS — PARTICLE NETWORK
@@ -324,6 +338,7 @@ function productPreview(p) {
 }
 
 function renderProducts(filter = 'all') {
+    if (!grid) return;
     const list = filter === 'all' ? PRODUCTS : PRODUCTS.filter(p => p.category === filter);
 
     grid.innerHTML = list.map(p => `
@@ -366,7 +381,7 @@ function renderProducts(filter = 'all') {
     });
 }
 
-filterBtns.forEach(btn => {
+if (grid) filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         filterBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -375,7 +390,7 @@ filterBtns.forEach(btn => {
     });
 });
 
-renderProducts();
+if (grid) renderProducts();
 
 /* =============================================
    PRODUCT MODAL
@@ -385,6 +400,7 @@ const modalBody = document.getElementById('modalBody');
 const modalClose = document.getElementById('modalClose');
 
 function openModal(id) {
+    if (!modal || !modalBody) return;
     const p = PRODUCTS.find(x => x.id === id);
     if (!p) return;
 
@@ -417,7 +433,7 @@ function openModal(id) {
                 </div>
             </div>
             <div class="modal-btns">
-                <a href="#order" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
+                <a href="/orcamento.html" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
                 <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
             </div>
         </div>
@@ -438,12 +454,13 @@ function openModal(id) {
 }
 
 function closeModal() {
+    if (!modal) return;
     modal.classList.remove('open');
     document.body.classList.remove('no-scroll');
 }
 
-modalClose.addEventListener('click', closeModal);
-modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+if (modalClose) modalClose.addEventListener('click', closeModal);
+if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 /* =============================================
@@ -454,7 +471,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
     const dotsEl = document.getElementById('testiDots');
     const prev   = document.getElementById('testiPrev');
     const next   = document.getElementById('testiNext');
-    if (!track) return;
+    if (!track || !dotsEl || !prev || !next) return;
 
     track.innerHTML = TESTIMONIALS.map(t => `
         <div class="testi-card">
@@ -486,6 +503,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
     function goTo(page) {
         const pages = Math.ceil(cards.length / perPage);
+        if (!cards.length || !pages) return;
         idx = Math.max(0, Math.min(page, pages - 1));
         const gapPx = 24;
         const cardW = cards[0].offsetWidth;
@@ -505,10 +523,13 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
     // Auto-play
     let timer = setInterval(() => goTo(idx + 1 >= Math.ceil(cards.length / perPage) ? 0 : idx + 1), 5000);
-    track.closest('.testimonials-wrap').addEventListener('mouseenter', () => clearInterval(timer));
-    track.closest('.testimonials-wrap').addEventListener('mouseleave', () => {
-        timer = setInterval(() => goTo(idx + 1 >= Math.ceil(cards.length / perPage) ? 0 : idx + 1), 5000);
-    });
+    const wrap = track.closest('.testimonials-wrap');
+    if (wrap) {
+        wrap.addEventListener('mouseenter', () => clearInterval(timer));
+        wrap.addEventListener('mouseleave', () => {
+            timer = setInterval(() => goTo(idx + 1 >= Math.ceil(cards.length / perPage) ? 0 : idx + 1), 5000);
+        });
+    }
 })();
 
 /* =============================================
@@ -524,7 +545,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
     function setStep(step) {
         document.querySelectorAll('.form-page').forEach(p => p.classList.remove('active'));
-        document.getElementById(`formPage${step}`).classList.add('active');
+        const activePage = document.getElementById(`formPage${step}`);
+        if (!activePage) return;
+        activePage.classList.add('active');
 
         document.querySelectorAll('.fstep').forEach((el, i) => {
             el.classList.remove('active', 'done');
@@ -536,6 +559,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
     function validateStep(step) {
         const page    = document.getElementById(`formPage${step}`);
+        if (!page) return false;
         const inputs  = page.querySelectorAll('[required]');
         let   valid   = true;
 
@@ -562,14 +586,14 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
         return valid;
     }
 
-    document.getElementById('step1Next').addEventListener('click', () => {
+    document.getElementById('step1Next')?.addEventListener('click', () => {
         if (validateStep(1)) setStep(2);
     });
-    document.getElementById('step2Back').addEventListener('click', () => setStep(1));
-    document.getElementById('step2Next').addEventListener('click', () => {
+    document.getElementById('step2Back')?.addEventListener('click', () => setStep(1));
+    document.getElementById('step2Next')?.addEventListener('click', () => {
         if (validateStep(2)) setStep(3);
     });
-    document.getElementById('step3Back').addEventListener('click', () => setStep(2));
+    document.getElementById('step3Back')?.addEventListener('click', () => setStep(2));
 
     form.addEventListener('submit', e => {
         e.preventDefault();
@@ -582,16 +606,18 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
         setTimeout(() => {
             document.querySelectorAll('.form-page').forEach(p => p.classList.remove('active'));
-            document.querySelector('.form-steps-bar').style.display = 'none';
-            success.classList.add('show');
+            const stepsBar = document.querySelector('.form-steps-bar');
+            if (stepsBar) stepsBar.style.display = 'none';
+            if (success) success.classList.add('show');
         }, 1200);
     });
 
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
             form.reset();
-            success.classList.remove('show');
-            document.querySelector('.form-steps-bar').style.display = '';
+            if (success) success.classList.remove('show');
+            const stepsBar = document.querySelector('.form-steps-bar');
+            if (stepsBar) stepsBar.style.display = '';
             setStep(1);
         });
     }
@@ -615,7 +641,7 @@ if (phoneInput) {
 /* =============================================
    BACK TO TOP
    ============================================= */
-document.getElementById('backTop').addEventListener('click', () => {
+if (backTopBtn) backTopBtn.addEventListener('click', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
