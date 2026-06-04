@@ -830,14 +830,93 @@ document.getElementById('adminNav').addEventListener('click', e => {
     document.getElementById('catalogView').classList.toggle('hidden', view !== 'catalog');
     document.getElementById('calcView').classList.toggle('hidden', view !== 'calc');
     document.getElementById('usersView').classList.toggle('hidden', view !== 'users');
+    document.getElementById('settingsView').classList.toggle('hidden', view !== 'settings');
     const auditView = document.getElementById('auditView');
     if (auditView) auditView.classList.toggle('hidden', view !== 'audit');
     if (view === 'users') loadUsersView();
+    if (view === 'settings') loadSettingsView();
     if (view === 'audit') {
         loadAuditLogs();
         startAuditPolling();
     } else {
         stopAuditPolling();
+    }
+});
+
+/* ── SITE SETTINGS VIEW ────────────────────────────────── */
+const SETTINGS_FIELDS = {
+    whatsapp: 'settingsWhatsapp',
+    email: 'settingsEmail',
+    instagram: 'settingsInstagram',
+    shopee: 'settingsShopee',
+    mercadolivre: 'settingsMercadoLivre',
+};
+
+function fillSettingsForm(settings = {}) {
+    Object.entries(SETTINGS_FIELDS).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = settings[key] || '';
+    });
+}
+
+function readSettingsForm() {
+    return Object.fromEntries(
+        Object.entries(SETTINGS_FIELDS).map(([key, id]) => {
+            const el = document.getElementById(id);
+            return [key, el ? el.value.trim() : ''];
+        })
+    );
+}
+
+function setSettingsMessage(text, type = '') {
+    const msg = document.getElementById('settingsMsg');
+    msg.textContent = text;
+    msg.className = `settings-msg ${type}`.trim();
+}
+
+async function loadSettingsView() {
+    setSettingsMessage('Carregando configurações...');
+    try {
+        const res = await workerFetch('/settings');
+        const data = await res.json();
+        if (!res.ok) {
+            setSettingsMessage(data.error || 'Erro ao carregar configurações.', 'error');
+            return;
+        }
+        fillSettingsForm(data.settings || {});
+        setSettingsMessage('Configurações carregadas.');
+    } catch {
+        setSettingsMessage('Erro de conexão ao carregar configurações.', 'error');
+    }
+}
+
+document.getElementById('settingsSaveBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('settingsSaveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+    setSettingsMessage('');
+
+    try {
+        const settings = readSettingsForm();
+        const res = await workerFetch('/settings', {
+            method: 'PUT',
+            body: JSON.stringify(settings),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            setSettingsMessage(data.error || 'Erro ao salvar configurações.', 'error');
+            return;
+        }
+
+        fillSettingsForm(data.settings || settings);
+        setSettingsMessage('Configurações salvas. O site público já pode usar os novos links.', 'success');
+        showToast('Configurações atualizadas.');
+    } catch {
+        setSettingsMessage('Erro de conexão ao salvar configurações.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar configurações';
     }
 });
 

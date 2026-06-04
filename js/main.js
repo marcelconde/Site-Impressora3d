@@ -73,6 +73,7 @@ const CATEGORY_LABELS = {
 
 // Pasta base no Cloudinary — não altere
 const CLD_BASE = 'Produtos';
+const SITE_SETTINGS_URL = 'https://forgecon-auth.marcel-conde.workers.dev/settings';
 
 const TESTIMONIALS = [
     { name:'Marcel Conde',     city:'Recife, PE',           rating:5, avatar:'MC', text:'Vamo fazer essa porra funcionar mano' },
@@ -685,20 +686,45 @@ window.configurarSite = function(config = {}) {
         whatsapp, email, nome
     } = config;
 
+    const clean = value => typeof value === 'string' ? value.trim() : '';
+    const normalizeInstagram = value => {
+        const raw = clean(value);
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        const username = raw
+            .replace(/^@/, '')
+            .replace(/^instagram\.com\//i, '')
+            .replace(/^www\.instagram\.com\//i, '')
+            .replace(/\/$/, '');
+        return username ? `https://www.instagram.com/${username}/` : '';
+    };
+    const instagramLabel = value => {
+        const raw = clean(value);
+        if (!raw) return '';
+        const fromUrl = raw.replace(/\/$/, '').split('/').pop();
+        return '@' + fromUrl.replace(/^@/, '');
+    };
+    const normalizeWhatsapp = value => {
+        const raw = clean(value);
+        const digits = raw.replace(/\D/g, '');
+        if (!digits) return '';
+        return `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`;
+    };
+
     const update = (id, href) => {
         const el = document.getElementById(id);
         if (el && href) el.href = href;
     };
 
     if (instagram) {
-        update('nav-instagram',    instagram);
-        update('footer-instagram', instagram);
-        update('cta-instagram',    instagram);
+        const instagramUrl = normalizeInstagram(instagram);
+        update('nav-instagram',    instagramUrl);
+        update('footer-instagram', instagramUrl);
+        update('cta-instagram',    instagramUrl);
         const c = document.getElementById('contact-instagram');
         if (c) {
-            const username = instagram.replace(/\/$/, '').split('/').pop().replace('@','');
-            c.textContent = '@' + username;
-            c.href = instagram;
+            c.textContent = instagramLabel(instagram);
+            c.href = instagramUrl;
         }
     }
     if (shopee) {
@@ -714,13 +740,16 @@ window.configurarSite = function(config = {}) {
         const el = document.getElementById('contact-whatsapp');
         if (el) {
             el.textContent = whatsapp;
-            const digits = whatsapp.replace(/\D/g, '');
-            if (digits) el.href = `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`;
+            const whatsappUrl = normalizeWhatsapp(whatsapp);
+            if (whatsappUrl) el.href = whatsappUrl;
         }
     }
     if (email) {
         const el = document.getElementById('contact-email');
-        if (el) el.textContent = email;
+        if (el) {
+            el.textContent = email;
+            el.href = `mailto:${email}`;
+        }
     }
     if (nome) {
         document.querySelectorAll('.logo-main').forEach(el => {
@@ -730,6 +759,27 @@ window.configurarSite = function(config = {}) {
     }
     console.log('✅ Site configurado!', config);
 };
+
+async function carregarConfiguracoesDoSite() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    try {
+        const res = await fetch(SITE_SETTINGS_URL, {
+            cache: 'no-store',
+            signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.settings) configurarSite(data.settings);
+    } catch (error) {
+        console.warn('Configurações remotas indisponíveis:', error);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+carregarConfiguracoesDoSite();
 
 // Exemplo de uso (descomentar e preencher quando tiver os dados):
 // configurarSite({

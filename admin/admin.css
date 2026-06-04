@@ -519,6 +519,73 @@ select option { background: var(--bg3); }
 .confirm-btns { display: flex; gap: 12px; justify-content: center; }
 
 /* =============================================
+   SETTINGS VIEW
+   ============================================= */
+.settings-card {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: var(--r-lg);
+    padding: 24px;
+    max-width: 980px;
+}
+
+.settings-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 20px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--border2);
+}
+
+.settings-card-head h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    margin-bottom: 6px;
+}
+
+.settings-card-head p {
+    color: var(--text2);
+    font-size: .9rem;
+}
+
+.settings-pill {
+    flex: 0 0 auto;
+    background: rgba(14,165,233,.12);
+    border: 1px solid rgba(14,165,233,.25);
+    color: var(--cyan);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: .75rem;
+    font-weight: 700;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.settings-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border2);
+}
+
+.settings-msg {
+    margin-right: auto;
+    color: var(--text2);
+    font-size: .85rem;
+}
+.settings-msg.success { color: #34d399; }
+.settings-msg.error { color: #f87171; }
+
+/* =============================================
    TOAST
    ============================================= */
 .toast {
@@ -791,6 +858,9 @@ select option { background: var(--bg3); }
     .calc-result-col { position: static; }
     .admin-nav { padding: 0 16px; }
     .admin-nav-tab { padding: 12px 14px; font-size: .8rem; }
+    .settings-grid { grid-template-columns: 1fr; }
+    .settings-card-head,
+    .settings-actions { flex-direction: column; align-items: stretch; }
 }
 
 @media (max-width: 500px) {

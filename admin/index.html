@@ -104,6 +104,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 Usuários
             </button>
+            <button class="admin-nav-tab" data-view="settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.4 1.08V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.6 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.08-.4H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .4-1.08V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.24.38.6.67 1 .8.18.06.37.09.56.09H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15Z"/></svg>
+                Configurações
+            </button>
         </nav>
 
         <!-- Content -->
@@ -176,6 +180,63 @@
                     <div id="invitesList" class="users-list"></div>
                 </div>
             </div><!-- /usersView -->
+
+            <!-- ── CONFIGURAÇÕES VIEW ───────────────────── -->
+            <div id="settingsView" class="hidden">
+                <div class="content-header">
+                    <div>
+                        <h1>Configurações do Site</h1>
+                        <p>Atualize contatos e links das lojas sem mexer no código</p>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-head">
+                        <div>
+                            <h3>Contatos e redes</h3>
+                            <p>Esses dados aparecem automaticamente no site público.</p>
+                        </div>
+                        <span class="settings-pill">Site público</span>
+                    </div>
+
+                    <div class="settings-grid">
+                        <div class="form-group">
+                            <label for="settingsWhatsapp">WhatsApp</label>
+                            <input type="text" id="settingsWhatsapp" class="input-full" placeholder="Ex: 11 95028-0670">
+                            <span class="field-hint">Usado para abrir conversa direta no WhatsApp.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingsEmail">E-mail</label>
+                            <input type="email" id="settingsEmail" class="input-full" placeholder="Ex: contato@forgecon.com.br">
+                            <span class="field-hint">Usado como contato principal no site.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingsInstagram">Instagram</label>
+                            <input type="text" id="settingsInstagram" class="input-full" placeholder="Ex: @_forgecon_ ou link completo">
+                            <span class="field-hint">Aceita usuário com @ ou URL completa.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingsShopee">Loja Shopee</label>
+                            <input type="url" id="settingsShopee" class="input-full" placeholder="https://shopee.com.br/sua-loja">
+                            <span class="field-hint">Botões e ícones da Shopee apontam para este link.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settingsMercadoLivre">Loja Mercado Livre</label>
+                            <input type="url" id="settingsMercadoLivre" class="input-full" placeholder="https://www.mercadolivre.com.br/sua-loja">
+                            <span class="field-hint">Botões do Mercado Livre apontam para este link.</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-actions">
+                        <span id="settingsMsg" class="settings-msg"></span>
+                        <button class="btn btn-primary" id="settingsSaveBtn">Salvar configurações</button>
+                    </div>
+                </div>
+            </div><!-- /settingsView -->
 
             <!-- ── CALCULADORA VIEW ───────────────────────── -->
             <div id="calcView" class="hidden">
