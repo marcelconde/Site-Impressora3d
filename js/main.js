@@ -695,7 +695,11 @@ window.configurarSite = function(config = {}) {
         update('footer-instagram', instagram);
         update('cta-instagram',    instagram);
         const c = document.getElementById('contact-instagram');
-        if (c) c.textContent = '@' + instagram.split('/').pop().replace('@','');
+        if (c) {
+            const username = instagram.replace(/\/$/, '').split('/').pop().replace('@','');
+            c.textContent = '@' + username;
+            c.href = instagram;
+        }
     }
     if (shopee) {
         update('nav-shopee',    shopee);
@@ -708,7 +712,11 @@ window.configurarSite = function(config = {}) {
     }
     if (whatsapp) {
         const el = document.getElementById('contact-whatsapp');
-        if (el) el.textContent = whatsapp;
+        if (el) {
+            el.textContent = whatsapp;
+            const digits = whatsapp.replace(/\D/g, '');
+            if (digits) el.href = `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}`;
+        }
     }
     if (email) {
         const el = document.getElementById('contact-email');

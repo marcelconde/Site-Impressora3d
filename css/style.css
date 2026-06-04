@@ -1243,7 +1243,8 @@ section { position: relative; }
 }
 .contact-ico svg { width: 20px; height: 20px; color: var(--purple-l); }
 .contact-lbl { display: block; font-size: .75rem; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
-.contact-val { font-weight: 600; font-size: .95rem; }
+.contact-val { font-weight: 600; font-size: .95rem; color: var(--text); text-decoration: none; }
+.contact-val:hover { color: var(--cyan); }
 
 .marketplace-links p { color: var(--text2); font-size: .875rem; margin-bottom: 12px; }
 .market-btns { display: flex; gap: 12px; flex-wrap: wrap; }
