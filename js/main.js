@@ -433,7 +433,7 @@ function openModal(id) {
                 </div>
             </div>
             <div class="modal-btns">
-                <a href="/orcamento.html" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
+                <a href="/orcamento/" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
                 <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
             </div>
         </div>

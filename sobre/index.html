@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forgecon — Impressão 3D Profissional</title>
+    <title>Sobre — Forgecon</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Forgecon">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="description" content="Impressões 3D personalizadas, catálogo de produtos, orçamento e contato da Forgecon.">
+    <meta name="description" content="Conheça a Forgecon, os materiais utilizados e diferenciais da nossa impressão 3D.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -85,156 +85,43 @@
         </div>
     </nav>
 
-    <!-- HERO -->
-    <section id="home" class="hero">
-        <canvas id="heroCanvas"></canvas>
-        <div class="hero-overlay"></div>
-
-        <div class="hero-layout">
-            <div class="hero-content">
-                <div class="hero-badge">
-                    <span class="badge-pulse"></span>
-                    Impressão 3D Profissional
+    <!-- ABOUT -->
+    <section class="about-section" id="about">
+        <div class="container">
+            <div class="about-wrap">
+                <div class="about-visual" data-reveal aria-hidden="true">
+                    <div class="about-cards-stack">
+                        <div class="acard acard-1">
+                            <span class="acard-ico">🖨️</span>
+                            <div><strong>Tecnologia FDM & Resin</strong><span>Impressoras de alta precisão</span></div>
+                        </div>
+                        <div class="acard acard-2">
+                            <span class="acard-ico">🎨</span>
+                            <div><strong>+30 cores disponíveis</strong><span>PLA, PETG, ABS e mais</span></div>
+                        </div>
+                        <div class="acard acard-3">
+                            <span class="acard-ico">📦</span>
+                            <div><strong>Embalagem segura</strong><span>Envio para todo o Brasil</span></div>
+                        </div>
+                    </div>
                 </div>
-                <h1 class="hero-title">
-                    Transforme<br>
-                    <span class="gradient-text" id="typewriter">ideias em realidade</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Miniaturas, peças decorativas, suportes funcionais e projetos
-                    personalizados feitos em impressão 3D com acabamento profissional.
-                    Envie sua ideia e receba um orçamento sob medida.
-                </p>
-                <div class="hero-btns">
-                    <a href="/produtos/" class="btn btn-primary btn-lg">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><polyline points="16 3 12 7 8 3"/></svg>
-                        Ver Produtos
-                    </a>
-                    <a href="/orcamento/" class="btn btn-outline btn-lg">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        Solicitar Orçamento
-                    </a>
-                    <a href="/avaliacoes/" class="btn btn-outline btn-lg">
-                        <span>Ver Avaliações</span>
-                    </a>
-                </div>
-            </div>
-
-            <div class="hero-visual" aria-hidden="true">
-                <div class="printer-wrap">
-                    <svg class="printer-svg" viewBox="0 0 280 300" xmlns="http://www.w3.org/2000/svg" fill="none">
-                        <defs>
-                            <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stop-color="#7c3aed"/>
-                                <stop offset="100%" stop-color="#0ea5e9"/>
-                            </linearGradient>
-                            <filter id="nglow" x="-80%" y="-80%" width="260%" height="260%">
-                                <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
-                                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-                            </filter>
-                            <filter id="sglow" x="-40%" y="-40%" width="180%" height="180%">
-                                <feGaussianBlur in="SourceGraphic" stdDeviation="3"/>
-                            </filter>
-                        </defs>
-
-                        <!-- Frame — vertical posts -->
-                        <rect x="20" y="22" width="10" height="225" rx="5" stroke="url(#pg)" stroke-width="1.5" opacity=".7"/>
-                        <rect x="250" y="22" width="10" height="225" rx="5" stroke="url(#pg)" stroke-width="1.5" opacity=".7"/>
-                        <!-- Frame — top beam -->
-                        <rect x="20" y="20" width="240" height="10" rx="5" stroke="url(#pg)" stroke-width="1.5" opacity=".7"/>
-                        <!-- Frame — base -->
-                        <rect x="12" y="258" width="256" height="14" rx="6" fill="rgba(124,58,237,.12)" stroke="url(#pg)" stroke-width="1.5" opacity=".7"/>
-
-                        <!-- Corner dots -->
-                        <circle cx="25" cy="25" r="5" fill="#7c3aed" opacity=".9"/>
-                        <circle cx="255" cy="25" r="5" fill="#0ea5e9" opacity=".9"/>
-                        <circle cx="25" cy="243" r="5" fill="#7c3aed" opacity=".9"/>
-                        <circle cx="255" cy="243" r="5" fill="#0ea5e9" opacity=".9"/>
-
-                        <!-- Z-axis dashed guides -->
-                        <line x1="25" y1="30" x2="25" y2="239" stroke="rgba(124,58,237,.25)" stroke-width="1" stroke-dasharray="5 4"/>
-                        <line x1="255" y1="30" x2="255" y2="239" stroke="rgba(14,165,233,.25)" stroke-width="1" stroke-dasharray="5 4"/>
-
-                        <!-- X-axis rail -->
-                        <rect x="30" y="72" width="220" height="7" rx="3.5" fill="rgba(167,139,250,.35)" stroke="rgba(167,139,250,.6)" stroke-width="1"/>
-                        <rect x="30" y="68" width="9" height="15" rx="3" fill="rgba(124,58,237,.7)"/>
-                        <rect x="241" y="68" width="9" height="15" rx="3" fill="rgba(14,165,233,.7)"/>
-
-                        <!-- Side display panel -->
-                        <rect x="1" y="115" width="16" height="65" rx="3" fill="rgba(124,58,237,.08)" stroke="rgba(124,58,237,.3)" stroke-width="1"/>
-                        <rect x="4" y="120" width="10" height="4" rx="1" fill="#7c3aed" class="pled pa"/>
-                        <rect x="4" y="128" width="10" height="4" rx="1" fill="#0ea5e9" class="pled pb"/>
-                        <rect x="4" y="136" width="10" height="4" rx="1" fill="#7c3aed" class="pled pc"/>
-                        <rect x="4" y="144" width="10" height="4" rx="1" fill="#0ea5e9" class="pled pd"/>
-                        <rect x="4" y="152" width="10" height="4" rx="1" fill="#7c3aed" class="pled pe"/>
-                        <rect x="4" y="160" width="10" height="4" rx="1" fill="#0ea5e9" class="pled pf"/>
-
-                        <!-- Printed object layers (build up bottom → top) -->
-                        <g class="p-object">
-                            <rect x="78"  y="215" width="124" height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="84"  y="206" width="112" height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="90"  y="197" width="100" height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="97"  y="188" width="86"  height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="104" y="179" width="72"  height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="111" y="170" width="58"  height="9" rx="2.5" fill="url(#pg)"/>
-                            <rect x="120" y="161" width="40"  height="9" rx="2.5" fill="url(#pg)"/>
-                        </g>
-
-                        <!-- Print bed -->
-                        <rect x="30" y="228" width="220" height="13" rx="3" fill="rgba(14,165,233,.18)" stroke="rgba(14,165,233,.55)" stroke-width="1.5"/>
-                        <line x1="55"  y1="228" x2="55"  y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <line x1="88"  y1="228" x2="88"  y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <line x1="121" y1="228" x2="121" y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <line x1="154" y1="228" x2="154" y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <line x1="187" y1="228" x2="187" y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <line x1="220" y1="228" x2="220" y2="241" stroke="rgba(14,165,233,.2)" stroke-width="1"/>
-                        <rect x="30" y="237" width="220" height="4" rx="2" fill="#0ea5e9" class="p-bed-glow"/>
-
-                        <!-- Extruder head (animates along X rail) -->
-                        <g class="p-extruder">
-                            <!-- Body -->
-                            <rect x="-25" y="-20" width="50" height="38" rx="6" fill="rgba(16,8,36,.97)" stroke="url(#pg)" stroke-width="1.5"/>
-                            <!-- Fan rings -->
-                            <circle cx="0" cy="-2" r="13" stroke="rgba(14,165,233,.35)" stroke-width="1" stroke-dasharray="3 2.5"/>
-                            <circle cx="0" cy="-2" r="7" fill="rgba(14,165,233,.1)" stroke="rgba(14,165,233,.5)" stroke-width="1"/>
-                            <!-- Heat block -->
-                            <rect x="-11" y="18" width="22" height="18" rx="3" fill="rgba(124,58,237,.28)" stroke="rgba(167,139,250,.65)" stroke-width="1.2"/>
-                            <!-- Nozzle -->
-                            <polygon points="-7,36 7,36 4,50 -4,50" fill="rgba(167,139,250,.9)"/>
-                            <!-- Hot tip glow -->
-                            <circle cx="0" cy="52" r="7" fill="#0ea5e9" class="p-nozzle-outer" filter="url(#nglow)"/>
-                            <circle cx="0" cy="52" r="3" fill="white" class="p-nozzle-inner"/>
-                        </g>
-                    </svg>
+                <div class="about-content" data-reveal>
+                    <span class="section-tag">Nossa história</span>
+                    <h2>Apaixonados por<br><span class="gradient-text">criação e tecnologia</span></h2>
+                    <p>Começamos com uma impressora 3D e uma paixão por criar. Hoje, transformamos ideias em objetos tangíveis para clientes em todo o Brasil.</p>
+                    <p>Cada peça carrega nosso cuidado com detalhes e compromisso com a qualidade. Não fazemos apenas impressões — fazemos arte funcional.</p>
+                    <div class="material-tags">
+                        <span>PLA Premium</span>
+                        <span>PETG</span>
+                        <span>Resina</span>
+                        <span>ABS</span>
+                        <span>TPU Flexível</span>
+                        <span>Madeira</span>
+                        <span>Metálico</span>
+                    </div>
+                    <a href="/orcamento/" class="btn btn-primary">Fale conosco</a>
                 </div>
             </div>
-        </div>
-
-        <div class="hero-stats">
-            <div class="hstat">
-                <span class="hstat-n" data-target="1">0</span><span class="hstat-s">+</span>
-                <span class="hstat-l">Pedidos Entregues</span>
-            </div>
-            <div class="hstat-div"></div>
-            <div class="hstat">
-                <span class="hstat-n" data-target="1">0</span><span class="hstat-s">+</span>
-                <span class="hstat-l">Clientes Satisfeitos</span>
-            </div>
-            <div class="hstat-div"></div>
-            <div class="hstat">
-                <span class="hstat-n" data-target="1">0</span><span class="hstat-s">+</span>
-                <span class="hstat-l">Designs Únicos</span>
-            </div>
-            <div class="hstat-div"></div>
-            <div class="hstat">
-                <span class="hstat-n" data-target="1">0</span><span class="hstat-s">★</span>
-                <span class="hstat-l">Avaliação Média</span>
-            </div>
-        </div>
-
-        <div class="scroll-hint" aria-hidden="true">
-            <div class="scroll-mouse"><div class="scroll-dot"></div></div>
-            <span>Role para explorar</span>
         </div>
     </section>
 
