@@ -1,31 +1,49 @@
-// Mudamos o nome para forçar o navegador a perceber que teve atualização
-const CACHE_NAME = 'forgecon-sem-cache-v1';
+const APP_VERSION = 'forgecon-fresh-v20260604-1';
 
-// Força a instalação imediata do novo Service Worker
 self.addEventListener('install', (event) => {
     self.skipWaiting();
 });
 
-// Assim que ativar, apaga TODOS os caches antigos que estavam travando seu site
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    return caches.delete(cacheName);
-                })
-            );
-        })
+        clearAllCaches().then(() => self.clients.claim())
     );
-    self.clients.claim();
 });
 
-// Intercepta as requisições e manda buscar direto da internet (rede) sempre, ignorando o cache
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        fetch(event.request).catch((error) => {
-            console.error('Erro de rede no Service Worker:', error);
-            throw error;
-        })
-    );
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'CLEAR_APP_CACHE') {
+        event.waitUntil(clearAllCaches());
+    }
+    if (event.data?.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
+
+self.addEventListener('fetch', (event) => {
+    if (event.request.method !== 'GET') return;
+
+    const url = new URL(event.request.url);
+
+    if (url.origin !== self.location.origin) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
+    event.respondWith((async () => {
+        if (event.request.mode === 'navigate') {
+            await clearAllCaches();
+        }
+
+        try {
+            return await fetch(event.request, { cache: 'reload' });
+        } catch (error) {
+            console.error(`[${APP_VERSION}] Erro de rede no Service Worker:`, error);
+            throw error;
+        }
+    })());
+});
+
+async function clearAllCaches() {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+}

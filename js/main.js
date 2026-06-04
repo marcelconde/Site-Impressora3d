@@ -645,6 +645,17 @@ if (backTopBtn) backTopBtn.addEventListener('click', () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
+const mobileRefreshBtn = document.getElementById('mobileRefresh');
+if (mobileRefreshBtn) {
+    mobileRefreshBtn.addEventListener('click', () => {
+        if (typeof window.ForgeconRefreshApp === 'function') {
+            window.ForgeconRefreshApp();
+        } else {
+            window.location.reload();
+        }
+    });
+}
+
 /* =============================================
    SMOOTH SCROLL
    ============================================= */
@@ -664,6 +675,53 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
    ============================================= */
 const yearEl = document.getElementById('currentYear');
 if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+/* =============================================
+   PWA FRESHNESS — KEEP APP UPDATED
+   ============================================= */
+(function initPwaFreshness() {
+    const clearAppCache = async () => {
+        if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(key => caches.delete(key)));
+        }
+        if (navigator.serviceWorker?.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_APP_CACHE' });
+        }
+    };
+
+    window.ForgeconRefreshApp = async function() {
+        try {
+            await clearAppCache();
+        } finally {
+            window.location.reload();
+        }
+    };
+
+    if ('serviceWorker' in navigator) {
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
+
+        const updateServiceWorker = async () => {
+            try {
+                await clearAppCache();
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(registrations.map(registration => registration.update()));
+            } catch (error) {
+                console.warn('Não foi possível verificar atualização do app:', error);
+            }
+        };
+
+        window.addEventListener('pageshow', updateServiceWorker);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') updateServiceWorker();
+        });
+    }
+})();
 
 /* =============================================
    CATEGORY CARDS — FILTER PRODUCTS
