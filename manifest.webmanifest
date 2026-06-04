@@ -1,0 +1,48 @@
+{
+  "id": "/",
+  "name": "Forgecon",
+  "short_name": "Forgecon",
+  "description": "Catálogo e orçamento de impressões 3D da Forgecon.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06060f",
+  "theme_color": "#7c3aed",
+  "categories": ["shopping", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/icons/forgecon-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/forgecon-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/forgecon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Admin",
+      "short_name": "Admin",
+      "description": "Abrir painel administrativo da Forgecon",
+      "url": "/admin/",
+      "icons": [
+        {
+          "src": "/assets/icons/forgecon-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
