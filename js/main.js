@@ -243,6 +243,10 @@ navLinks.forEach(link => {
     const el = document.getElementById('typewriter');
     if (!el) return;
     const phrases = ['ideias em realidade', 'designs em objetos', 'criatividade em forma', 'sonhos em peças'];
+    if (window.matchMedia('(max-width: 600px)').matches) {
+        el.textContent = phrases[0];
+        return;
+    }
     let pi = 0, ci = 0, deleting = false;
     const speed = { type: 80, delete: 45, pause: 2200 };
 

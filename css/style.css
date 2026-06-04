@@ -1745,18 +1745,9 @@ select option { background: var(--bg3); color: var(--text); }
     .logo-svg { width: 34px; height: 34px; }
     .logo-main { font-size: .95rem; letter-spacing: .04em; }
     .logo-sub { display: none; }
-    .nav-quote-btn {
-        padding: 9px 13px;
-        font-size: 0;
-        min-width: 0;
-        flex-shrink: 1;
-        box-shadow: 0 10px 24px rgba(124,58,237,.28);
-    }
-    .nav-quote-btn::after {
-        content: "Orçamento";
-        font-size: .78rem;
-        line-height: 1;
-    }
+    .nav-quote-btn { display: none; }
+    .hero-title { min-height: 3.4em; }
+    #typewriter { min-height: 1.2em; }
     .mobile-refresh { display: flex; right: 18px; bottom: 86px; }
     .back-top { right: 18px; bottom: 24px; }
 
@@ -1776,9 +1767,4 @@ select option { background: var(--bg3); color: var(--text); }
     .footer-bottom .container { flex-direction: column; text-align: center; }
 
     .hstat { flex: 1 0 50%; }
-}
-
-@media (max-width: 420px) {
-    .nav-quote-btn { padding: 9px 11px; }
-    .nav-quote-btn::after { content: "Orçar"; }
 }
