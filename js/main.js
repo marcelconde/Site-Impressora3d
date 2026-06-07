@@ -73,7 +73,7 @@ const CATEGORY_LABELS = {
 
 // Pasta base no Cloudinary — não altere
 const CLD_BASE = 'Produtos';
-const SITE_SETTINGS_URL = 'https://forgecon-auth.marcel-conde.workers.dev/settings';
+const SITE_SETTINGS_URL = 'https://api.forgecon.com.br/settings';
 
 const TESTIMONIALS = [
     { name:'Marcel Conde',     city:'Recife, PE',           rating:5, avatar:'MC', text:'Vamo fazer essa porra funcionar mano' },

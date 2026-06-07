@@ -1,6 +1,6 @@
 /* ── CONFIG ─────────────────────────────────────────────── */
 const CONFIG = {
-    workerUrl: 'https://forgecon-auth.marcel-conde.workers.dev',
+    workerUrl: 'https://api.forgecon.com.br',
     cloudName: 'das730gjc',
     uploadPreset: 'print3d_upload',
     storageKey: 'print3d_products',
