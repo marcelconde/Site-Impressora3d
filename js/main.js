@@ -799,6 +799,13 @@ window.configurarSite = function(config = {}) {
         if (!digits) return '';
         return `https://wa.me/${digits.startsWith('55') ? digits : `55${digits}`}?text=${encodeURIComponent(whatsappMessage)}`;
     };
+    const normalizeExternalUrl = value => {
+        const raw = clean(value);
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (/^\/\//.test(raw)) return `https:${raw}`;
+        return `https://${raw}`;
+    };
 
     const update = (id, href) => {
         const el = document.getElementById(id);
@@ -817,13 +824,15 @@ window.configurarSite = function(config = {}) {
         }
     }
     if (shopee) {
-        update('nav-shopee',    shopee);
-        update('footer-shopee', shopee);
-        update('ml-shopee',     shopee);
+        const shopeeUrl = normalizeExternalUrl(shopee);
+        update('nav-shopee',    shopeeUrl);
+        update('footer-shopee', shopeeUrl);
+        update('ml-shopee',     shopeeUrl);
     }
     if (mercadolivre) {
-        update('footer-ml',       mercadolivre);
-        update('ml-mercadolivre', mercadolivre);
+        const mercadoLivreUrl = normalizeExternalUrl(mercadolivre);
+        update('footer-ml',       mercadoLivreUrl);
+        update('ml-mercadolivre', mercadoLivreUrl);
     }
     if (whatsapp) {
         const whatsappUrl = normalizeWhatsapp(whatsapp);
