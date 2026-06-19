@@ -348,6 +348,86 @@
                             </div>
                         </div>
 
+                        <!-- Orçamento PDF -->
+                        <div class="calc-card quote-card">
+                            <h3 class="calc-card-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+                                Orçamento em PDF
+                            </h3>
+
+                            <div class="quote-mode">
+                                <button type="button" class="quote-mode-btn active" data-quote-mode="manual">Manual</button>
+                                <button type="button" class="quote-mode-btn" data-quote-mode="product">Produto cadastrado</button>
+                            </div>
+
+                            <div class="quote-product-box hidden" id="quoteProductBox">
+                                <div class="form-group">
+                                    <label for="qProduct">Selecionar produto</label>
+                                    <select id="qProduct">
+                                        <option value="">Escolha um produto cadastrado...</option>
+                                    </select>
+                                    <span class="field-hint">Ao escolher um produto, nome, descrição e preço são preenchidos automaticamente.</span>
+                                </div>
+                            </div>
+
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="qClient">Cliente</label>
+                                    <input type="text" id="qClient" placeholder="Nome do cliente">
+                                </div>
+                                <div class="form-group">
+                                    <label for="qPhone">Telefone / WhatsApp</label>
+                                    <input type="text" id="qPhone" placeholder="(00) 00000-0000">
+                                </div>
+                            </div>
+
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="qTitle">Produto / projeto</label>
+                                    <input type="text" id="qTitle" placeholder="Ex: Miniatura personalizada">
+                                </div>
+                                <div class="form-group">
+                                    <label for="qValidity">Validade do orçamento</label>
+                                    <input type="number" id="qValidity" min="1" step="1" value="7">
+                                    <span class="field-hint">Quantidade de dias.</span>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="qDescription">Descrição do orçamento</label>
+                                <textarea id="qDescription" rows="4" placeholder="Detalhe tamanho, acabamento, cor, observações do cliente e condições do pedido."></textarea>
+                            </div>
+
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="qSalePrice">Valor final para o cliente</label>
+                                    <div class="calc-affix">
+                                        <span class="affix-pre">R$</span>
+                                        <input type="number" id="qSalePrice" min="0" step="0.01" placeholder="0,00">
+                                    </div>
+                                    <span class="field-hint">Pode usar a sugestão de venda ou digitar manualmente.</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="qPayment">Forma de pagamento</label>
+                                    <input type="text" id="qPayment" placeholder="Pix, cartão, dinheiro...">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="qNotes">Observações extras</label>
+                                <textarea id="qNotes" rows="3" placeholder="Ex: Prazo estimado, retirada, frete, entrada, variação de cor ou acabamento."></textarea>
+                            </div>
+
+                            <div class="quote-actions">
+                                <button type="button" class="btn btn-outline" id="quoteUseCostBtn">Usar custo total</button>
+                                <button type="button" class="btn btn-outline" id="quoteUseSuggestedBtn">Usar lucro 100%</button>
+                                <button type="button" class="btn btn-primary" id="quotePdfBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                                    Gerar PDF
+                                </button>
+                            </div>
+                        </div>
+
                     </div><!-- /calc-inputs-col -->
 
                     <!-- Coluna direita: resultado -->
@@ -541,6 +621,7 @@
     <!-- ── TOAST ──────────────────────────────────── -->
     <div class="toast hidden" id="toast"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
     <script src="admin.js"></script>
     <script>
         if ('serviceWorker' in navigator) {

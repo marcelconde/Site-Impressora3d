@@ -109,6 +109,7 @@ async function showPanel() {
     loadProducts();
     renderGrid();
     updateStats();
+    updateQuoteProductOptions();
 }
 
 function showLogin() {
@@ -764,6 +765,7 @@ productForm.addEventListener('submit', async e => {
     closeModal();
     renderGrid();
     updateStats();
+    updateQuoteProductOptions();
 });
 
 /* ── DELETE ─────────────────────────────────────────────── */
@@ -805,6 +807,7 @@ doDelete.addEventListener('click', async () => {
     pendingDeleteId = null;
     renderGrid();
     updateStats();
+    updateQuoteProductOptions();
     showToast('Produto excluído.');
 });
 
@@ -835,6 +838,7 @@ document.getElementById('adminNav').addEventListener('click', e => {
     if (auditView) auditView.classList.toggle('hidden', view !== 'audit');
     if (view === 'users') loadUsersView();
     if (view === 'settings') loadSettingsView();
+    if (view === 'calc') updateQuoteProductOptions();
     if (view === 'audit') {
         loadAuditLogs();
         startAuditPolling();
@@ -1100,6 +1104,374 @@ function calcUpdate() {
     }, 3500); 
 }
 
+/* ── QUOTE PDF ─────────────────────────────────────────── */
+const quoteEls = {
+    productBox: document.getElementById('quoteProductBox'),
+    product: document.getElementById('qProduct'),
+    client: document.getElementById('qClient'),
+    phone: document.getElementById('qPhone'),
+    title: document.getElementById('qTitle'),
+    validity: document.getElementById('qValidity'),
+    description: document.getElementById('qDescription'),
+    salePrice: document.getElementById('qSalePrice'),
+    payment: document.getElementById('qPayment'),
+    notes: document.getElementById('qNotes'),
+    useCost: document.getElementById('quoteUseCostBtn'),
+    useSuggested: document.getElementById('quoteUseSuggestedBtn'),
+    pdf: document.getElementById('quotePdfBtn'),
+};
+
+function moneyInput(value) {
+    if (!Number.isFinite(value) || value <= 0) return '';
+    return value.toFixed(2);
+}
+
+function quoteNumber() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `ORC-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function calcSnapshot() {
+    const materialKey = document.getElementById('cMaterial').value;
+    const mat      = MATERIALS[materialKey] || MATERIALS.pla;
+    const priceKg  = parseFloat(document.getElementById('cPriceKg').value) || 0;
+    const qty      = parseFloat(document.getElementById('cQty').value)     || 0;
+    const hours    = parseFloat(document.getElementById('cHours').value)   || 0;
+    const mins     = parseFloat(document.getElementById('cMins').value)    || 0;
+    const watts    = parseFloat(document.getElementById('cWatts').value)   || 0;
+    const kwh      = parseFloat(document.getElementById('cKwh').value)     || 0;
+    const errPct   = parseFloat(document.getElementById('cError').value)   || 0;
+    const matCost  = (qty / mat.div) * priceKg;
+    const totalHours = hours + mins / 60;
+    const engCost  = (watts / 1000) * totalHours * kwh;
+    const subtotal = matCost + engCost;
+    const errCost  = subtotal * (errPct / 100);
+    const total    = subtotal + errCost;
+
+    return {
+        materialKey,
+        materialName: document.querySelector(`#cMaterial option[value="${materialKey}"]`)?.textContent || materialKey,
+        unit: mat.unit,
+        unitLabel: mat.unitLbl,
+        priceKg,
+        qty,
+        hours,
+        mins,
+        watts,
+        kwh,
+        errPct,
+        matCost,
+        totalHours,
+        engCost,
+        subtotal,
+        errCost,
+        total,
+        suggested100: total * 2,
+    };
+}
+
+function updateQuoteProductOptions() {
+    if (!quoteEls.product) return;
+    const current = quoteEls.product.value;
+    const ordered = [...products].sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+    quoteEls.product.innerHTML = '<option value="">Escolha um produto cadastrado...</option>' +
+        ordered.map(p => `<option value="${p.id}">${esc(p.name)}${p.price != null ? ` — ${brl(Number(p.price))}` : ' — consultar preço'}</option>`).join('');
+    if (current && ordered.some(p => String(p.id) === String(current))) quoteEls.product.value = current;
+}
+
+function setQuoteMode(mode) {
+    document.querySelectorAll('.quote-mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.quoteMode === mode);
+    });
+    quoteEls.productBox?.classList.toggle('hidden', mode !== 'product');
+    if (mode === 'product') updateQuoteProductOptions();
+}
+
+function applyProductToQuote(id) {
+    const product = products.find(p => String(p.id) === String(id));
+    if (!product) return;
+
+    const category = CAT_LABELS[product.category] || product.category || '';
+    const colors = product.colors?.length ? `\nCores disponíveis: ${product.colors.join(', ')}.` : '';
+    quoteEls.title.value = product.name || '';
+    quoteEls.description.value = [
+        product.desc || '',
+        category ? `Categoria: ${category}.` : '',
+        colors,
+    ].filter(Boolean).join('\n');
+
+    if (product.price != null) {
+        quoteEls.salePrice.value = moneyInput(Number(product.price));
+    }
+}
+
+function readQuoteForm() {
+    const calc = calcSnapshot();
+    const salePrice = parseFloat(quoteEls.salePrice.value) || 0;
+    const days = Math.max(1, parseInt(quoteEls.validity.value, 10) || 7);
+    const now = new Date();
+    const validUntil = new Date(now);
+    validUntil.setDate(validUntil.getDate() + days);
+
+    return {
+        number: quoteNumber(),
+        date: now.toLocaleDateString('pt-BR'),
+        validUntil: validUntil.toLocaleDateString('pt-BR'),
+        client: quoteEls.client.value.trim() || 'Cliente não informado',
+        phone: quoteEls.phone.value.trim(),
+        title: quoteEls.title.value.trim() || 'Impressão 3D personalizada',
+        description: quoteEls.description.value.trim() || 'Orçamento de impressão 3D conforme informações alinhadas com o cliente.',
+        salePrice,
+        payment: quoteEls.payment.value.trim() || 'A combinar',
+        notes: quoteEls.notes.value.trim(),
+        calc,
+    };
+}
+
+function addWrappedText(doc, text, x, y, maxWidth, lineHeight = 13) {
+    const lines = doc.splitTextToSize(String(text || ''), maxWidth);
+    doc.text(lines, x, y);
+    return y + lines.length * lineHeight;
+}
+
+function drawQuoteHeader(doc, quote) {
+    doc.setFillColor(8, 8, 20);
+    doc.rect(0, 0, 595, 112, 'F');
+    doc.setFillColor(124, 58, 237);
+    doc.rect(0, 108, 595, 4, 'F');
+    doc.setFillColor(14, 165, 233);
+    doc.rect(150, 108, 445, 4, 'F');
+
+    doc.setDrawColor(124, 58, 237);
+    doc.setLineWidth(2);
+    doc.line(42, 44, 62, 32);
+    doc.line(62, 32, 82, 44);
+    doc.line(82, 44, 82, 68);
+    doc.line(82, 68, 62, 80);
+    doc.line(62, 80, 42, 68);
+    doc.line(42, 68, 42, 44);
+    doc.setFillColor(14, 165, 233);
+    doc.circle(62, 56, 11, 'F');
+
+    doc.setTextColor(245, 247, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(24);
+    doc.text('FORGECON', 102, 54);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(158, 170, 198);
+    doc.text('IMPRESSAO 3D PROFISSIONAL', 103, 70);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(245, 247, 255);
+    doc.text('ORCAMENTO', 430, 48);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(190, 198, 218);
+    doc.text(quote.number, 430, 65);
+    doc.text(`Emitido em ${quote.date}`, 430, 80);
+}
+
+function drawInfoBox(doc, title, rows, x, y, w) {
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(225, 230, 240);
+    doc.roundedRect(x, y, w, 84, 8, 8, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(124, 58, 237);
+    doc.text(title, x + 14, y + 20);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(68, 77, 96);
+    let cursor = y + 39;
+    rows.forEach(row => {
+        doc.text(row, x + 14, cursor);
+        cursor += 15;
+    });
+}
+
+function generateQuotePdf() {
+    const jsPDF = window.jspdf?.jsPDF;
+    const quote = readQuoteForm();
+    if (!quote.salePrice) {
+        showToast('Informe o valor final do orçamento antes de gerar o PDF.', 'error');
+        quoteEls.salePrice.focus();
+        return;
+    }
+    if (!jsPDF) {
+        openQuotePrintFallback(quote);
+        return;
+    }
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const margin = 42;
+    const pageW = 595;
+    const pageH = 842;
+
+    drawQuoteHeader(doc, quote);
+    drawInfoBox(doc, 'Cliente', [
+        quote.client,
+        quote.phone ? `Contato: ${quote.phone}` : 'Contato nao informado',
+        `Valido ate ${quote.validUntil}`,
+    ], margin, 140, 245);
+    drawInfoBox(doc, 'Projeto', [
+        quote.title,
+        `Material: ${quote.calc.materialName}`,
+        `Tempo: ${quote.calc.hours}h ${quote.calc.mins}min`,
+    ], 308, 140, 245);
+
+    let y = 258;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Descricao do orçamento', margin, y);
+    y += 20;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    y = addWrappedText(doc, quote.description, margin, y, pageW - margin * 2, 14) + 10;
+
+    if (y > 470) {
+        doc.addPage();
+        y = 54;
+    }
+
+    doc.setFillColor(245, 247, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margin, y, pageW - margin * 2, 148, 8, 8, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Resumo do custo estimado', margin + 16, y + 24);
+
+    const rows = [
+        ['Material', `${quote.calc.qty || 0}${quote.calc.unit} x ${brl(quote.calc.priceKg)} por ${quote.calc.unitLabel}`, brl(quote.calc.matCost)],
+        ['Energia', `${quote.calc.watts}W por ${quote.calc.totalHours.toFixed(2).replace('.', ',')}h`, brl(quote.calc.engCost)],
+        ['Margem de erro', `${quote.calc.errPct}% sobre subtotal`, brl(quote.calc.errCost)],
+        ['Custo total estimado', 'Base calculada para a impressao', brl(quote.calc.total)],
+    ];
+    let ry = y + 50;
+    rows.forEach((row, i) => {
+        if (i === rows.length - 1) {
+            doc.setFillColor(239, 246, 255);
+            doc.roundedRect(margin + 10, ry - 13, pageW - margin * 2 - 20, 26, 5, 5, 'F');
+            doc.setFont('helvetica', 'bold');
+        } else {
+            doc.setFont('helvetica', 'normal');
+        }
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+        doc.text(row[0], margin + 18, ry);
+        doc.text(row[1], margin + 160, ry);
+        doc.setTextColor(15, 23, 42);
+        doc.text(row[2], pageW - margin - 18, ry, { align: 'right' });
+        ry += 25;
+    });
+
+    y += 176;
+    doc.setFillColor(124, 58, 237);
+    doc.roundedRect(margin, y, pageW - margin * 2, 72, 12, 12, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text('Valor final do orçamento', margin + 20, y + 28);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(25);
+    doc.text(brl(quote.salePrice), pageW - margin - 20, y + 43, { align: 'right' });
+    y += 104;
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Forma de pagamento', margin, y);
+    doc.text('Observacoes', 308, y);
+    y += 18;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    addWrappedText(doc, quote.payment, margin, y, 220, 12);
+    addWrappedText(doc, quote.notes || 'Prazo, frete e acabamento final devem ser confirmados antes da producao.', 308, y, 245, 12);
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, pageH - 78, pageW - margin, pageH - 78);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Forgecon - Impressao 3D Profissional', margin, pageH - 55);
+    doc.text('Orcamento sujeito a alteracao conforme ajustes de arquivo, acabamento, prazo e disponibilidade de material.', margin, pageH - 42);
+
+    const safeName = quote.title.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'orcamento';
+    doc.save(`${quote.number}-${safeName}.pdf`);
+
+    recordAdminAudit('gerou_orcamento', 'calculadora', null, {
+        cliente: quote.client,
+        projeto: quote.title,
+        valor: brl(quote.salePrice),
+        custo_total: brl(quote.calc.total),
+    });
+    showToast('PDF do orçamento gerado.');
+}
+
+function openQuotePrintFallback(quote) {
+    const win = window.open('', '_blank');
+    if (!win) {
+        showToast('Não foi possível abrir a janela de impressão.', 'error');
+        return;
+    }
+    win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(quote.number)}</title>
+        <style>
+            body{font-family:Arial,sans-serif;margin:0;color:#0f172a;background:#fff}
+            header{background:#080814;color:#fff;padding:32px 42px;border-bottom:5px solid #7c3aed}
+            h1{margin:0;font-size:30px;letter-spacing:2px} .sub{color:#9aa6c0;margin-top:4px}
+            main{padding:36px 42px} .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+            .box{border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:18px}
+            .total{background:#7c3aed;color:#fff;border-radius:14px;padding:22px;margin-top:20px;display:flex;justify-content:space-between;align-items:center}
+            .total strong{font-size:30px} table{width:100%;border-collapse:collapse}td{padding:10px;border-bottom:1px solid #e2e8f0}
+            @media print{button{display:none}}
+        </style></head><body>
+        <header><h1>FORGECON</h1><div class="sub">IMPRESSAO 3D PROFISSIONAL</div></header>
+        <main>
+            <div class="grid">
+                <div class="box"><strong>Cliente</strong><p>${esc(quote.client)}<br>${esc(quote.phone || 'Contato nao informado')}<br>Valido ate ${esc(quote.validUntil)}</p></div>
+                <div class="box"><strong>Projeto</strong><p>${esc(quote.title)}<br>Material: ${esc(quote.calc.materialName)}<br>Tempo: ${quote.calc.hours}h ${quote.calc.mins}min</p></div>
+            </div>
+            <div class="box"><strong>Descricao</strong><p>${esc(quote.description).replace(/\n/g, '<br>')}</p></div>
+            <div class="box"><strong>Resumo do custo</strong><table>
+                <tr><td>Material</td><td>${brl(quote.calc.matCost)}</td></tr>
+                <tr><td>Energia</td><td>${brl(quote.calc.engCost)}</td></tr>
+                <tr><td>Margem de erro</td><td>${brl(quote.calc.errCost)}</td></tr>
+                <tr><td><strong>Custo total estimado</strong></td><td><strong>${brl(quote.calc.total)}</strong></td></tr>
+            </table></div>
+            <div class="total"><span>Valor final do orçamento</span><strong>${brl(quote.salePrice)}</strong></div>
+            <div class="grid" style="margin-top:20px">
+                <div class="box"><strong>Pagamento</strong><p>${esc(quote.payment)}</p></div>
+                <div class="box"><strong>Observacoes</strong><p>${esc(quote.notes || 'A combinar').replace(/\n/g, '<br>')}</p></div>
+            </div>
+            <button onclick="window.print()">Imprimir / salvar PDF</button>
+        </main></body></html>`);
+    win.document.close();
+    win.focus();
+}
+
+document.querySelectorAll('.quote-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setQuoteMode(btn.dataset.quoteMode));
+});
+
+quoteEls.product?.addEventListener('change', () => applyProductToQuote(quoteEls.product.value));
+quoteEls.useCost?.addEventListener('click', () => {
+    quoteEls.salePrice.value = moneyInput(calcSnapshot().total);
+    showToast('Custo total aplicado ao orçamento.', 'info');
+});
+quoteEls.useSuggested?.addEventListener('click', () => {
+    quoteEls.salePrice.value = moneyInput(calcSnapshot().suggested100);
+    showToast('Sugestão com lucro 100% aplicada.', 'info');
+});
+quoteEls.pdf?.addEventListener('click', generateQuotePdf);
+updateQuoteProductOptions();
+
 /* ── ESC to close ───────────────────────────────────────── */
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
@@ -1180,7 +1552,7 @@ function auditIcon(action) {
         login: '🔑', logout: '🚪', create: '➕', update: '✏️', delete: '🗑️',
         invite: '✉️', accept_invite: '🤝', usou_calculadora: '🧮',
         recuperar_senha: '🆘', redefinir_senha: '🔐', criar_usuario: '👤',
-        excluir_usuario: '🚫', enviar_convite: '📨'
+        excluir_usuario: '🚫', enviar_convite: '📨', gerou_orcamento: '📄'
     };
     return icons[action] || '📌';
 }
@@ -1191,7 +1563,8 @@ function auditActionLabel(action) {
         delete: 'Removeu', invite: 'Convidou', accept_invite: 'Aceitou convite',
         usou_calculadora: 'Calculou custo', recuperar_senha: 'Pediu para recuperar senha',
         redefinir_senha: 'Redefiniu senha', criar_usuario: 'Criou usuário',
-        excluir_usuario: 'Excluiu usuário', enviar_convite: 'Enviou convite'
+        excluir_usuario: 'Excluiu usuário', enviar_convite: 'Enviou convite',
+        gerou_orcamento: 'Gerou orçamento'
     };
     return labels[action] || action;
 }

@@ -755,6 +755,57 @@ select option { background: var(--bg3); }
 }
 .markup-highlight strong { color: var(--purple-l); }
 
+.quote-card {
+    border-color: rgba(124,58,237,.24);
+    background:
+        linear-gradient(145deg, rgba(124,58,237,.08), rgba(14,165,233,.035)),
+        var(--card);
+}
+.quote-mode {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 18px;
+    background: rgba(255,255,255,.035);
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+}
+.quote-mode-btn {
+    border: 0;
+    border-radius: calc(var(--r) - 3px);
+    padding: 9px 13px;
+    background: transparent;
+    color: var(--text2);
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    transition: color var(--trans), background var(--trans);
+}
+.quote-mode-btn:hover { color: var(--text); }
+.quote-mode-btn.active {
+    color: var(--text);
+    background: linear-gradient(135deg, rgba(124,58,237,.35), rgba(14,165,233,.22));
+}
+.quote-product-box {
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid rgba(124,58,237,.18);
+    border-radius: var(--r);
+    background: rgba(124,58,237,.055);
+}
+.quote-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 4px;
+}
+.quote-actions .btn {
+    min-height: 42px;
+}
+
 /* =============================================
    USUÁRIOS & CONVITES
    ============================================= */
@@ -858,6 +909,8 @@ select option { background: var(--bg3); }
     .calc-result-col { position: static; }
     .admin-nav { padding: 0 16px; }
     .admin-nav-tab { padding: 12px 14px; font-size: .8rem; }
+    .quote-actions { justify-content: stretch; }
+    .quote-actions .btn { flex: 1 1 180px; }
     .settings-grid { grid-template-columns: 1fr; }
     .settings-card-head,
     .settings-actions { flex-direction: column; align-items: stretch; }
@@ -868,4 +921,7 @@ select option { background: var(--bg3); }
     .admin-content { padding: 24px 16px; }
     .modal-box { max-height: 100vh; border-radius: 0; }
     .form-row-2 { grid-template-columns: 1fr; }
+    .quote-mode { width: 100%; }
+    .quote-mode-btn { flex: 1; }
+    .quote-actions .btn { flex-basis: 100%; }
 }
