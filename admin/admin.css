@@ -400,6 +400,7 @@ label { font-size: .82rem; font-weight: 600; color: var(--text2); letter-spacing
 /* Form inputs */
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 
 input[type="text"],
 input[type="email"],
@@ -442,6 +443,32 @@ select option { background: var(--bg3); }
 .extra-img-row .input-full { flex: 1; }
 .extra-images-section { margin-top: 4px; }
 .extra-images-header { display: flex; align-items: center; justify-content: space-between; }
+.gallery-img-row {
+    padding: 8px;
+    background: rgba(255,255,255,.025);
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+}
+.gallery-img-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(255,255,255,.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    font-weight: 700;
+}
+.gallery-img-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.extra-img-cover { flex-shrink: 0; }
 .btn-cyan {
     background: rgba(14,165,233,.15);
     color: var(--cyan);
@@ -920,7 +947,10 @@ select option { background: var(--bg3); }
     .topbar { padding: 0 16px; }
     .admin-content { padding: 24px 16px; }
     .modal-box { max-height: 100vh; border-radius: 0; }
-    .form-row-2 { grid-template-columns: 1fr; }
+    .form-row-2,
+    .form-row-3 { grid-template-columns: 1fr; }
+    .gallery-img-row { align-items: stretch; flex-wrap: wrap; }
+    .gallery-img-row .input-full { flex-basis: calc(100% - 60px); }
     .quote-mode { width: 100%; }
     .quote-mode-btn { flex: 1; }
     .quote-actions .btn { flex-basis: 100%; }

@@ -74,6 +74,7 @@ const CATEGORY_LABELS = {
 // Pasta base no Cloudinary — não altere
 const CLD_BASE = 'Produtos';
 const SITE_SETTINGS_URL = 'https://api.forgecon.com.br/settings';
+const SHIPPING_QUOTE_URL = 'https://api.forgecon.com.br/shipping/quote';
 
 const TESTIMONIALS = [
     { name:'Marcel Conde',     city:'Recife, PE',           rating:5, avatar:'MC', text:'Vamo fazer essa porra funcionar mano' },
@@ -403,12 +404,126 @@ const modal     = document.getElementById('productModal');
 const modalBody = document.getElementById('modalBody');
 const modalClose = document.getElementById('modalClose');
 
+function productSpecsHTML(p) {
+    const dims = p.dimensions || {};
+    const hasDims = dims.length || dims.width || dims.height;
+    const specs = [
+        p.material ? ['Material', p.material] : null,
+        hasDims ? ['Dimensões', `${dims.length || '-'} x ${dims.width || '-'} x ${dims.height || '-'} cm`] : null,
+        p.weight ? ['Peso', `${p.weight} g`] : null,
+    ].filter(Boolean);
+
+    if (!specs.length) return '';
+    return `
+        <div class="modal-specs">
+            <p class="modal-section-title">Ficha técnica</p>
+            <div class="modal-specs-grid">
+                ${specs.map(([label, value]) => `
+                    <div class="modal-spec">
+                        <span>${label}</span>
+                        <strong>${value}</strong>
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
+}
+
+function shippingBoxHTML(p) {
+    const dims = p.dimensions || {};
+    const canQuote = Boolean(p.weight && dims.length && dims.width && dims.height);
+    return `
+        <div class="modal-shipping" data-product-id="${p.id}">
+            <p class="modal-section-title">Calcular frete</p>
+            <div class="shipping-row">
+                <input type="text" id="shippingCep" inputmode="numeric" maxlength="9" placeholder="Digite seu CEP">
+                <button class="btn btn-outline" id="shippingBtn" ${canQuote ? '' : 'disabled'}>Calcular</button>
+            </div>
+            <div class="shipping-result" id="shippingResult">
+                ${canQuote ? 'Informe o CEP para consultar as opções de envio.' : 'Frete disponível depois que peso e dimensões forem cadastrados.'}
+            </div>
+        </div>`;
+}
+
+function shippingPayload(p, cep) {
+    const dims = p.dimensions || {};
+    return {
+        cep: cep.replace(/\D/g, ''),
+        product: {
+            id: p.id,
+            name: p.name,
+            weight: Number(p.weight || 0),
+            width: Number(dims.width || 0),
+            height: Number(dims.height || 0),
+            length: Number(dims.length || 0),
+            price: Number(p.price || 0),
+        },
+    };
+}
+
+function setupShippingCalculator(p) {
+    const cepInput = document.getElementById('shippingCep');
+    const btn = document.getElementById('shippingBtn');
+    const result = document.getElementById('shippingResult');
+    if (!cepInput || !btn || !result) return;
+
+    cepInput.addEventListener('input', () => {
+        const digits = cepInput.value.replace(/\D/g, '').slice(0, 8);
+        cepInput.value = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    });
+
+    btn.addEventListener('click', async () => {
+        const cep = cepInput.value.replace(/\D/g, '');
+        if (cep.length !== 8) {
+            result.textContent = 'Digite um CEP válido com 8 números.';
+            result.className = 'shipping-result error';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Calculando...';
+        result.textContent = 'Consultando opções de envio...';
+        result.className = 'shipping-result';
+
+        try {
+            const res = await fetch(SHIPPING_QUOTE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(shippingPayload(p, cep)),
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.options?.length) {
+                result.textContent = 'Frete será confirmado no atendimento.';
+                result.className = 'shipping-result error';
+                return;
+            }
+
+            result.className = 'shipping-result ok';
+            result.innerHTML = data.options.map(opt => `
+                <div class="shipping-option">
+                    <span>${opt.name}</span>
+                    <strong>${opt.price}</strong>
+                    <small>${opt.deadline}</small>
+                </div>
+            `).join('');
+        } catch {
+            result.textContent = 'Frete será confirmado no atendimento.';
+            result.className = 'shipping-result error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Calcular';
+        }
+    });
+}
+
 function openModal(id) {
     if (!modal || !modalBody) return;
     const p = PRODUCTS.find(x => x.id === id);
     if (!p) return;
 
-    const allImages = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
+    const allImages = ((p.images && p.images.length) ? p.images : (p.image ? [p.image] : []))
+        .filter(Boolean)
+        .filter((img, index, arr) => arr.indexOf(img) === index);
     const modalPreview = allImages.length
         ? `<div class="modal-gallery">
             <div class="modal-gallery-main">
@@ -436,6 +551,8 @@ function openModal(id) {
                     ${(p.colors || []).map(c => `<span class="mcolor">${c}</span>`).join('')}
                 </div>
             </div>
+            ${productSpecsHTML(p)}
+            ${shippingBoxHTML(p)}
             <div class="modal-btns">
                 <a href="/orcamento/" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
                 <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
@@ -448,6 +565,7 @@ function openModal(id) {
 
     document.getElementById('modalOrder').addEventListener('click', closeModal);
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    setupShippingCalculator(p);
     document.querySelectorAll('.mg-thumb').forEach(thumb => {
         thumb.addEventListener('click', () => {
             document.getElementById('mgMain').src = thumb.dataset.full;

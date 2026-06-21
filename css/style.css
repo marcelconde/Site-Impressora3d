@@ -1659,6 +1659,89 @@ select option { background: var(--bg3); color: var(--text); }
     border: 1px solid var(--border2);
     color: var(--text2);
 }
+.modal-section-title {
+    font-size: .8rem;
+    color: var(--text2);
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+.modal-specs { margin: 18px 0 22px; }
+.modal-specs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.modal-spec {
+    background: rgba(255,255,255,.035);
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+    padding: 10px 12px;
+}
+.modal-spec span {
+    display: block;
+    color: var(--text3);
+    font-size: .68rem;
+    margin-bottom: 3px;
+}
+.modal-spec strong {
+    color: var(--text);
+    font-size: .82rem;
+}
+.modal-shipping {
+    margin: 18px 0 24px;
+    padding: 14px;
+    border-radius: var(--r);
+    border: 1px solid rgba(14,165,233,.2);
+    background: rgba(14,165,233,.045);
+}
+.shipping-row {
+    display: flex;
+    gap: 8px;
+}
+.shipping-row input {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+    color: var(--text);
+    padding: 10px 12px;
+    outline: none;
+}
+.shipping-row input:focus {
+    border-color: var(--cyan);
+}
+.shipping-row .btn {
+    flex-shrink: 0;
+}
+.shipping-row .btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+.shipping-result {
+    margin-top: 10px;
+    font-size: .78rem;
+    color: var(--text2);
+    line-height: 1.5;
+}
+.shipping-result.error { color: #fca5a5; }
+.shipping-result.ok {
+    display: grid;
+    gap: 8px;
+}
+.shipping-option {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    align-items: center;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border2);
+}
+.shipping-option span { color: var(--text); font-weight: 700; }
+.shipping-option strong { color: var(--cyan); }
+.shipping-option small { color: var(--text3); grid-column: 1 / -1; }
 .modal-btns { display: flex; gap: 12px; }
 .modal-btns .btn { flex: 1; justify-content: center; }
 
@@ -1762,6 +1845,9 @@ select option { background: var(--bg3); color: var(--text); }
 
     .form-row { grid-template-columns: 1fr; }
     .order-form-box { padding: 24px 20px; }
+    .modal-specs-grid { grid-template-columns: 1fr; }
+    .shipping-row { flex-direction: column; }
+    .shipping-row .btn { width: 100%; justify-content: center; }
 
     .footer-grid { grid-template-columns: 1fr; }
     .footer-bottom .container { flex-direction: column; text-align: center; }

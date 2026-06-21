@@ -527,13 +527,15 @@
 
                         <div class="extra-images-section">
                             <div class="extra-images-header">
-                                <label class="field-label" style="margin-top:14px">Fotos adicionais</label>
+                                <label class="field-label" style="margin-top:14px">Galeria do produto</label>
                                 <button type="button" class="btn btn-cyan btn-sm" id="syncCloudinaryBtn">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg>
                                     Buscar fotos
                                 </button>
                             </div>
-                            <p class="field-hint" id="syncHint">Preencha a pasta da capa acima e clique em "Buscar fotos" para carregar todas as fotos da pasta automaticamente.</p>
+                            <p class="field-hint" id="syncHint">Envie várias fotos de uma vez ou busque automaticamente a pasta do Cloudinary.</p>
+                            <input type="file" id="galleryFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>
+                            <button type="button" class="btn btn-outline btn-sm" id="galleryUploadBtn" style="margin:8px 0;width:100%">+ Enviar várias fotos</button>
                             <div id="extraImagesList"></div>
                             <button type="button" class="btn btn-outline btn-sm" id="addExtraImageBtn" style="margin-top:8px;width:100%">+ Adicionar caminho manualmente</button>
                         </div>
@@ -571,6 +573,45 @@
                             <label for="fDesc">Descrição *</label>
                             <textarea id="fDesc" rows="4" required placeholder="Descreva o produto, material, tamanhos disponíveis…"></textarea>
                             <span class="form-err" id="fDescErr"></span>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="fWeight">Peso para frete</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fWeight" min="0" step="1" placeholder="0">
+                                    <span class="affix-suf">g</span>
+                                </div>
+                                <span class="field-hint">Peso da peça já embalada, em gramas.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="fMaterial">Material principal</label>
+                                <input type="text" id="fMaterial" placeholder="PLA, PETG, Resina...">
+                            </div>
+                        </div>
+
+                        <div class="form-row-3">
+                            <div class="form-group">
+                                <label for="fLength">Comprimento</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fLength" min="0" step="0.1" placeholder="0">
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fWidth">Largura</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fWidth" min="0" step="0.1" placeholder="0">
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fHeight">Altura</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fHeight" min="0" step="0.1" placeholder="0">
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-group">

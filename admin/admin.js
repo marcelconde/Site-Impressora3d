@@ -435,6 +435,11 @@ function openModal(id) {
         document.getElementById('fCategory').value = p.category || '';
         document.getElementById('fPrice').value = p.price ?? '';
         document.getElementById('fDesc').value = p.desc || '';
+        document.getElementById('fWeight').value = p.weight ?? '';
+        document.getElementById('fMaterial').value = p.material || '';
+        document.getElementById('fLength').value = p.dimensions?.length ?? '';
+        document.getElementById('fWidth').value = p.dimensions?.width ?? '';
+        document.getElementById('fHeight').value = p.dimensions?.height ?? '';
         document.getElementById('fEmoji').value = p.emoji || '';
         document.getElementById('fBadge').value = p.badge || '';
         document.getElementById('imagePublicId').value = p.image || '';
@@ -495,17 +500,35 @@ function renderColorTags() {
 function renderExtraImages() {
     const list = document.getElementById('extraImagesList');
     list.innerHTML = extraImages.map((img, i) => `
-        <div class="extra-img-row">
+        <div class="extra-img-row gallery-img-row">
+            <div class="gallery-img-thumb">
+                ${img ? `<img src="${CLD_URL(img, 96, 96)}" alt="Foto ${i + 1}" loading="lazy">` : '<span>+</span>'}
+            </div>
             <input type="text" value="${esc(img)}" placeholder="Ex: Geek/Produto/foto2" class="input-full extra-img-input" data-i="${i}">
+            <button type="button" class="btn btn-outline btn-sm extra-img-cover" data-i="${i}">Capa</button>
             <button type="button" class="btn btn-del btn-sm extra-img-remove" data-i="${i}">✕</button>
         </div>
     `).join('');
     list.querySelectorAll('.extra-img-input').forEach(inp =>
         inp.addEventListener('input', e => { extraImages[+e.target.dataset.i] = e.target.value.trim(); })
     );
+    list.querySelectorAll('.extra-img-cover').forEach(btn =>
+        btn.addEventListener('click', e => setExtraImageAsCover(+e.target.dataset.i))
+    );
     list.querySelectorAll('.extra-img-remove').forEach(btn =>
         btn.addEventListener('click', e => { extraImages.splice(+e.target.dataset.i, 1); renderExtraImages(); })
     );
+}
+
+function setExtraImageAsCover(index) {
+    const nextCover = extraImages[index];
+    if (!nextCover) return;
+    const currentCover = document.getElementById('imagePublicId').value.trim();
+    extraImages.splice(index, 1);
+    if (currentCover) extraImages.unshift(currentCover);
+    document.getElementById('imagePublicId').value = nextCover;
+    showImagePreview(CLD_URL(nextCover));
+    renderExtraImages();
 }
 
 document.getElementById('addExtraImageBtn').addEventListener('click', () => {
@@ -513,6 +536,15 @@ document.getElementById('addExtraImageBtn').addEventListener('click', () => {
     renderExtraImages();
     const inputs = document.querySelectorAll('.extra-img-input');
     if (inputs.length) inputs[inputs.length - 1].focus();
+});
+
+const galleryFiles = document.getElementById('galleryFiles');
+const galleryUploadBtn = document.getElementById('galleryUploadBtn');
+
+galleryUploadBtn.addEventListener('click', () => galleryFiles.click());
+galleryFiles.addEventListener('change', () => {
+    if (galleryFiles.files.length) uploadGalleryFiles([...galleryFiles.files]);
+    galleryFiles.value = '';
 });
 
 document.getElementById('syncCloudinaryBtn').addEventListener('click', async () => {
@@ -663,6 +695,51 @@ async function handleFileSelected(file) {
     }
 }
 
+async function uploadGalleryFiles(files) {
+    const validFiles = files.filter(file => file.type.startsWith('image/'));
+    if (!validFiles.length) {
+        showToast('Selecione imagens JPG, PNG ou WebP.', 'error');
+        return;
+    }
+
+    const category = document.getElementById('fCategory').value || 'geral';
+    const name = document.getElementById('fName').value.trim() || 'produto';
+    const folder = `Produtos/${capitalizeFirst(category)}/${sanitizeName(name)}`;
+    const hint = document.getElementById('syncHint');
+    const btn = document.getElementById('galleryUploadBtn');
+
+    btn.disabled = true;
+    hint.style.color = '';
+
+    try {
+        for (let i = 0; i < validFiles.length; i++) {
+            const file = validFiles[i];
+            hint.textContent = `Enviando foto ${i + 1} de ${validFiles.length}...`;
+            const publicId = await uploadToCloudinary(file, folder);
+            const relative = publicId.replace(/^Produtos\//, '');
+            const coverInput = document.getElementById('imagePublicId');
+
+            if (!coverInput.value.trim()) {
+                coverInput.value = relative;
+                showImagePreview(CLD_URL(relative));
+            } else if (!extraImages.includes(relative)) {
+                extraImages.push(relative);
+            }
+            renderExtraImages();
+        }
+
+        hint.textContent = `${validFiles.length} foto(s) enviada(s). Use o botão "Capa" para escolher a principal.`;
+        hint.style.color = 'var(--green)';
+        showToast('Fotos enviadas com sucesso.');
+    } catch (err) {
+        hint.textContent = 'Erro ao enviar fotos. Tente novamente.';
+        hint.style.color = 'var(--red)';
+        showToast('Falha no upload: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 async function uploadToCloudinary(file, folder) {
     const fd = new FormData();
     fd.append('file', file);
@@ -726,6 +803,10 @@ productForm.addEventListener('submit', async e => {
     if (!validateForm()) return;
 
     const priceVal = document.getElementById('fPrice').value;
+    const coverImage = document.getElementById('imagePublicId').value.trim();
+    const images = [coverImage, ...extraImages.map(img => img.trim())]
+        .filter(Boolean)
+        .filter((img, index, arr) => arr.indexOf(img) === index);
     const existing = editingId != null ? products.find(p => p.id === editingId) : null;
     const product = {
         id: editingId ?? nextId(),
@@ -733,11 +814,18 @@ productForm.addEventListener('submit', async e => {
         category: document.getElementById('fCategory').value,
         price: priceVal !== '' ? parseFloat(priceVal) : null,
         desc: document.getElementById('fDesc').value.trim(),
+        weight: parseFloat(document.getElementById('fWeight').value) || null,
+        material: document.getElementById('fMaterial').value.trim() || null,
+        dimensions: {
+            length: parseFloat(document.getElementById('fLength').value) || null,
+            width: parseFloat(document.getElementById('fWidth').value) || null,
+            height: parseFloat(document.getElementById('fHeight').value) || null,
+        },
         colors: [...currentColors],
         emoji: document.getElementById('fEmoji').value.trim() || null,
         badge: document.getElementById('fBadge').value.trim() || null,
-        image: document.getElementById('imagePublicId').value.trim() || null,
-        images: [document.getElementById('imagePublicId').value.trim(), ...extraImages].filter(Boolean),
+        image: coverImage || images[0] || null,
+        images,
         rating: existing?.rating ?? 5.0,
         reviews: existing?.reviews ?? 0,
     };
@@ -1194,10 +1282,18 @@ function applyProductToQuote(id) {
 
     const category = CAT_LABELS[product.category] || product.category || '';
     const colors = product.colors?.length ? `\nCores disponíveis: ${product.colors.join(', ')}.` : '';
+    const dimensions = product.dimensions && (product.dimensions.length || product.dimensions.width || product.dimensions.height)
+        ? `\nDimensões aproximadas: ${product.dimensions.length || '-'} x ${product.dimensions.width || '-'} x ${product.dimensions.height || '-'} cm.`
+        : '';
+    const weight = product.weight ? `\nPeso aproximado: ${product.weight} g.` : '';
+    const material = product.material ? `\nMaterial: ${product.material}.` : '';
     quoteEls.title.value = product.name || '';
     quoteEls.description.value = [
         product.desc || '',
         category ? `Categoria: ${category}.` : '',
+        material,
+        dimensions,
+        weight,
         colors,
     ].filter(Boolean).join('\n');
 
@@ -1318,8 +1414,8 @@ function generateQuotePdf() {
     ], margin, 140, 245);
     drawInfoBox(doc, 'Projeto', [
         quote.title,
-        `Material: ${quote.calc.materialName}`,
-        `Tempo: ${quote.calc.hours}h ${quote.calc.mins}min`,
+        `Valor: ${brl(quote.salePrice)}`,
+        `Valido ate ${quote.validUntil}`,
     ], 308, 140, 245);
 
     let y = 258;
@@ -1338,39 +1434,6 @@ function generateQuotePdf() {
         y = 54;
     }
 
-    doc.setFillColor(245, 247, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(margin, y, pageW - margin * 2, 148, 8, 8, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(15, 23, 42);
-    doc.text('Resumo do custo estimado', margin + 16, y + 24);
-
-    const rows = [
-        ['Material', `${quote.calc.qty || 0}${quote.calc.unit} x ${brl(quote.calc.priceKg)} por ${quote.calc.unitLabel}`, brl(quote.calc.matCost)],
-        ['Energia', `${quote.calc.watts}W por ${quote.calc.totalHours.toFixed(2).replace('.', ',')}h`, brl(quote.calc.engCost)],
-        ['Margem de erro', `${quote.calc.errPct}% sobre subtotal`, brl(quote.calc.errCost)],
-        ['Custo total estimado', 'Base calculada para a impressao', brl(quote.calc.total)],
-    ];
-    let ry = y + 50;
-    rows.forEach((row, i) => {
-        if (i === rows.length - 1) {
-            doc.setFillColor(239, 246, 255);
-            doc.roundedRect(margin + 10, ry - 13, pageW - margin * 2 - 20, 26, 5, 5, 'F');
-            doc.setFont('helvetica', 'bold');
-        } else {
-            doc.setFont('helvetica', 'normal');
-        }
-        doc.setFontSize(9);
-        doc.setTextColor(71, 85, 105);
-        doc.text(row[0], margin + 18, ry);
-        doc.text(row[1], margin + 160, ry);
-        doc.setTextColor(15, 23, 42);
-        doc.text(row[2], pageW - margin - 18, ry, { align: 'right' });
-        ry += 25;
-    });
-
-    y += 176;
     doc.setFillColor(124, 58, 237);
     doc.roundedRect(margin, y, pageW - margin * 2, 72, 12, 12, 'F');
     doc.setTextColor(255, 255, 255);
@@ -1410,7 +1473,6 @@ function generateQuotePdf() {
         cliente: quote.client,
         projeto: quote.title,
         valor: brl(quote.salePrice),
-        custo_total: brl(quote.calc.total),
     });
     showToast('PDF do orçamento gerado.');
 }
@@ -1436,15 +1498,9 @@ function openQuotePrintFallback(quote) {
         <main>
             <div class="grid">
                 <div class="box"><strong>Cliente</strong><p>${esc(quote.client)}<br>${esc(quote.phone || 'Contato nao informado')}<br>Valido ate ${esc(quote.validUntil)}</p></div>
-                <div class="box"><strong>Projeto</strong><p>${esc(quote.title)}<br>Material: ${esc(quote.calc.materialName)}<br>Tempo: ${quote.calc.hours}h ${quote.calc.mins}min</p></div>
+                <div class="box"><strong>Projeto</strong><p>${esc(quote.title)}<br>Valor: ${brl(quote.salePrice)}<br>Valido ate ${esc(quote.validUntil)}</p></div>
             </div>
             <div class="box"><strong>Descricao</strong><p>${esc(quote.description).replace(/\n/g, '<br>')}</p></div>
-            <div class="box"><strong>Resumo do custo</strong><table>
-                <tr><td>Material</td><td>${brl(quote.calc.matCost)}</td></tr>
-                <tr><td>Energia</td><td>${brl(quote.calc.engCost)}</td></tr>
-                <tr><td>Margem de erro</td><td>${brl(quote.calc.errCost)}</td></tr>
-                <tr><td><strong>Custo total estimado</strong></td><td><strong>${brl(quote.calc.total)}</strong></td></tr>
-            </table></div>
             <div class="total"><span>Valor final do orçamento</span><strong>${brl(quote.salePrice)}</strong></div>
             <div class="grid" style="margin-top:20px">
                 <div class="box"><strong>Pagamento</strong><p>${esc(quote.payment)}</p></div>
