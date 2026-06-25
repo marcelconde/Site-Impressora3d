@@ -49,17 +49,44 @@ const DEFAULT_PRODUCTS = [
     { id:14, name:'Organizador de Cabos',category:'organizacao',price:null, badge:null, rating:5.0, reviews:0, desc:'Organizador de cabos para mesa e parede. Mantém seus cabos USB, carregadores e fones sempre organizados e acessíveis.', emoji:'🔌', colors:['Preto','Branco','Cinza'], image: null },
 ];
 
-// Admin panel saves products to localStorage; use those if available, fallback to defaults
-function loadProducts() {
+const PRODUCTS_URL = 'https://api.forgecon.com.br/products';
+
+// Cache local é apenas fallback; o catálogo oficial vem do Worker/D1.
+function normalizeProducts(list) {
+    return (Array.isArray(list) ? list : []).map(p => {
+        const images = Array.isArray(p.images)
+            ? p.images.filter(Boolean)
+            : (p.image ? [p.image] : []);
+        const uniqueImages = images.filter((img, index, arr) => arr.indexOf(img) === index);
+        return {
+            ...p,
+            images: uniqueImages,
+            image: p.image || uniqueImages[0] || null,
+            colors: Array.isArray(p.colors) ? p.colors : [],
+            dimensions: p.dimensions || {},
+        };
+    });
+}
+
+function loadCachedProducts() {
     try {
         const raw = localStorage.getItem('print3d_products');
         const saved = raw ? JSON.parse(raw) : null;
-        return (saved && saved.length) ? saved : DEFAULT_PRODUCTS;
+        return (saved && saved.length) ? normalizeProducts(saved) : DEFAULT_PRODUCTS;
     } catch {
         return DEFAULT_PRODUCTS;
     }
 }
-const PRODUCTS = loadProducts();
+
+function cacheProducts(list) {
+    try {
+        localStorage.setItem('print3d_products', JSON.stringify(list));
+    } catch {
+        // Cache é opcional; o site continua funcionando sem ele.
+    }
+}
+
+let PRODUCTS = loadCachedProducts();
 
 const CATEGORY_LABELS = {
     all:            'Todos',
@@ -326,12 +353,23 @@ function pvClass(cat) {
     }[cat] || 'pv-games';
 }
 
+function productImages(p) {
+    return (Array.isArray(p.images) && p.images.length)
+        ? p.images.filter(Boolean)
+        : (p.image ? [p.image] : []);
+}
+
 function productPreview(p) {
-    const imgUrl = CLOUDINARY.url(p.image, { width: 600, height: 450 });
+    const images = productImages(p);
+    const imgUrl = CLOUDINARY.url(images[0], { width: 600, height: 450 });
+    const photoCount = images.length > 1
+        ? `<div class="product-photo-count">${images.length} fotos</div>`
+        : '';
     if (imgUrl) {
         return `
             <div class="product-preview ${pvClass(p.category)} has-image">
                 ${p.badge ? `<div class="product-badge">${p.badge}</div>` : ''}
+                ${photoCount}
                 <img src="${imgUrl}" alt="${p.name}" loading="lazy" onerror="this.parentElement.classList.remove('has-image');this.remove()">
             </div>`;
     }
@@ -386,6 +424,23 @@ function renderProducts(filter = 'all') {
     });
 }
 
+async function syncProductsFromApi() {
+    if (!grid) return;
+
+    try {
+        const res = await fetch(PRODUCTS_URL, { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !Array.isArray(data.products) || !data.products.length) return;
+
+        PRODUCTS = normalizeProducts(data.products);
+        cacheProducts(PRODUCTS);
+        renderProducts(activeFilter);
+    } catch {
+        // Mantém o catálogo em cache/defaults caso a API esteja temporariamente indisponível.
+    }
+}
+
 if (grid) filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         filterBtns.forEach(b => b.classList.remove('active'));
@@ -395,7 +450,10 @@ if (grid) filterBtns.forEach(btn => {
     });
 });
 
-if (grid) renderProducts();
+if (grid) {
+    renderProducts();
+    syncProductsFromApi();
+}
 
 /* =============================================
    PRODUCT MODAL
@@ -521,41 +579,50 @@ function openModal(id) {
     const p = PRODUCTS.find(x => x.id === id);
     if (!p) return;
 
-    const allImages = ((p.images && p.images.length) ? p.images : (p.image ? [p.image] : []))
+    const allImages = productImages(p)
         .filter(Boolean)
         .filter((img, index, arr) => arr.indexOf(img) === index);
     const modalPreview = allImages.length
-        ? `<div class="modal-gallery">
+        ? `<div class="modal-gallery" data-gallery-count="${allImages.length}">
             <div class="modal-gallery-main">
                 <img id="mgMain" src="${CLOUDINARY.url(allImages[0], {width:800,height:500})}" alt="${p.name}">
+                ${allImages.length > 1 ? `
+                    <button class="mg-nav mg-prev" type="button" aria-label="Foto anterior">‹</button>
+                    <button class="mg-nav mg-next" type="button" aria-label="Próxima foto">›</button>
+                    <span class="mg-counter" id="mgCounter">1 / ${allImages.length}</span>
+                ` : ''}
             </div>
             ${allImages.length > 1 ? `<div class="modal-gallery-thumbs">
-                ${allImages.map((img, i) => `<img src="${CLOUDINARY.url(img, {width:120,height:90})}" class="mg-thumb${i===0?' active':''}" data-full="${CLOUDINARY.url(img, {width:800,height:500})}" alt="${p.name} ${i+1}">`).join('')}
+                ${allImages.map((img, i) => `<img src="${CLOUDINARY.url(img, {width:120,height:90})}" class="mg-thumb${i===0?' active':''}" data-i="${i}" data-full="${CLOUDINARY.url(img, {width:800,height:500})}" alt="${p.name} ${i+1}">`).join('')}
             </div>` : ''}
            </div>`
         : `<div class="modal-preview ${pvClass(p.category)}">${p.emoji || '📦'}</div>`;
 
     modalBody.innerHTML = `
-        ${modalPreview}
-        <div class="modal-info">
-            <div class="modal-category">${CATEGORY_LABELS[p.category]}</div>
-            <h3>${p.name}</h3>
-            <p class="modal-desc">${p.desc}</p>
-            <div class="modal-price">
-                ${p.price ? `R$ ${p.price.toFixed(2).replace('.',',')}` : 'Consultar preço'}
-                <small>Frete calculado no pedido • personalização disponível</small>
+        <div class="modal-product-layout">
+            <div class="modal-media">
+                ${modalPreview}
             </div>
-            <div class="modal-colors">
-                <p class="modal-colors-lbl">Cores disponíveis</p>
-                <div class="modal-colors-list">
-                    ${(p.colors || []).map(c => `<span class="mcolor">${c}</span>`).join('')}
+            <div class="modal-info">
+                <div class="modal-category">${CATEGORY_LABELS[p.category]}</div>
+                <h3>${p.name}</h3>
+                <p class="modal-desc">${p.desc}</p>
+                <div class="modal-price">
+                    ${p.price ? `R$ ${p.price.toFixed(2).replace('.',',')}` : 'Consultar preço'}
+                    <small>Frete calculado no pedido • personalização disponível</small>
                 </div>
-            </div>
-            ${productSpecsHTML(p)}
-            ${shippingBoxHTML(p)}
-            <div class="modal-btns">
-                <a href="/orcamento/" class="btn btn-primary" id="modalOrder">Fazer Pedido</a>
-                <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
+                <div class="modal-colors">
+                    <p class="modal-colors-lbl">Cores disponíveis</p>
+                    <div class="modal-colors-list">
+                        ${(p.colors || []).map(c => `<span class="mcolor">${c}</span>`).join('')}
+                    </div>
+                </div>
+                ${productSpecsHTML(p)}
+                ${shippingBoxHTML(p)}
+                <div class="modal-btns">
+                    <a href="/orcamento/" class="btn btn-primary" id="modalOrder">Solicitar Orçamento</a>
+                    <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
+                </div>
             </div>
         </div>
     `;
@@ -566,13 +633,27 @@ function openModal(id) {
     document.getElementById('modalOrder').addEventListener('click', closeModal);
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
     setupShippingCalculator(p);
+
+    let activeImageIndex = 0;
+    const mainImg = document.getElementById('mgMain');
+    const counter = document.getElementById('mgCounter');
+    const setGalleryImage = index => {
+        if (!mainImg || !allImages.length) return;
+        activeImageIndex = (index + allImages.length) % allImages.length;
+        mainImg.src = CLOUDINARY.url(allImages[activeImageIndex], {width:800,height:500});
+        document.querySelectorAll('.mg-thumb').forEach(t => {
+            t.classList.toggle('active', Number(t.dataset.i) === activeImageIndex);
+        });
+        if (counter) counter.textContent = `${activeImageIndex + 1} / ${allImages.length}`;
+    };
+
     document.querySelectorAll('.mg-thumb').forEach(thumb => {
         thumb.addEventListener('click', () => {
-            document.getElementById('mgMain').src = thumb.dataset.full;
-            document.querySelectorAll('.mg-thumb').forEach(t => t.classList.remove('active'));
-            thumb.classList.add('active');
+            setGalleryImage(Number(thumb.dataset.i || 0));
         });
     });
+    document.querySelector('.mg-prev')?.addEventListener('click', () => setGalleryImage(activeImageIndex - 1));
+    document.querySelector('.mg-next')?.addEventListener('click', () => setGalleryImage(activeImageIndex + 1));
 }
 
 function closeModal() {

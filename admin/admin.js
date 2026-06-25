@@ -19,22 +19,98 @@ let extraImages = [];
 let auditPollTimer = null;
 let loggedUser = null; 
 
-/* ── STORAGE ────────────────────────────────────────────── */
-function loadProducts() {
+/* ── PRODUCT STORAGE ────────────────────────────────────── */
+function loadCachedProducts() {
     try {
         const raw = localStorage.getItem(CONFIG.storageKey);
-        products = raw ? JSON.parse(raw) : [];
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
     } catch {
-        products = [];
+        return [];
     }
 }
 
-function saveProducts() {
+function saveProductsCache() {
     localStorage.setItem(CONFIG.storageKey, JSON.stringify(products));
 }
 
-function nextId() {
-    return products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
+function normalizeProductList(list) {
+    return (Array.isArray(list) ? list : []).map(p => {
+        const images = Array.isArray(p.images)
+            ? p.images.filter(Boolean)
+            : (p.image ? [p.image] : []);
+        const uniqueImages = images.filter((img, index, arr) => arr.indexOf(img) === index);
+        return {
+            ...p,
+            images: uniqueImages,
+            image: p.image || uniqueImages[0] || null,
+            colors: Array.isArray(p.colors) ? p.colors : [],
+            dimensions: p.dimensions || {},
+        };
+    });
+}
+
+async function loadProducts() {
+    const cached = normalizeProductList(loadCachedProducts());
+
+    try {
+        const res = await fetchWithTimeout(`${CONFIG.workerUrl}/products`, {}, 12000);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) throw new Error(data.error || 'Erro ao carregar produtos.');
+
+        products = normalizeProductList(data.products || []);
+
+        if (!products.length && cached.length && getToken()) {
+            await migrateCachedProducts(cached);
+            return;
+        }
+
+        saveProductsCache();
+    } catch (err) {
+        products = cached;
+        if (products.length) {
+            showToast('Catálogo carregado do cache local. O servidor não respondeu.', 'error');
+        } else {
+            showToast(err.message || 'Erro ao carregar produtos.', 'error');
+        }
+    }
+}
+
+async function migrateCachedProducts(cached) {
+    const imported = [];
+    for (const item of cached) {
+        const res = await workerFetch('/products', {
+            method: 'POST',
+            body: JSON.stringify(item),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.product) imported.push(data.product);
+    }
+
+    products = normalizeProductList(imported);
+    saveProductsCache();
+
+    if (products.length) {
+        showToast('Produtos antigos migrados para o catálogo online.');
+    }
+}
+
+async function saveProductOnServer(product, id = null) {
+    const res = await workerFetch(id == null ? '/products' : `/products/${id}`, {
+        method: id == null ? 'POST' : 'PUT',
+        body: JSON.stringify(product),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Erro ao salvar produto no servidor.');
+    return data.product;
+}
+
+async function deleteProductOnServer(id) {
+    const res = await workerFetch(`/products/${id}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Erro ao excluir produto no servidor.');
+    return true;
 }
 
 /* ── AUTH ───────────────────────────────────────────────── */
@@ -105,8 +181,8 @@ async function showPanel() {
         console.error("Erro ao puxar dados do usuário", e);
     }
 
-    setupAuditView(); 
-    loadProducts();
+    setupAuditView();
+    await loadProducts();
     renderGrid();
     updateStats();
     updateQuoteProductOptions();
@@ -323,8 +399,8 @@ function updateStats() {
     document.getElementById('statTotal').textContent = products.length;
     const cats = new Set(products.map(p => p.category)).size;
     document.getElementById('statCats').textContent = cats;
-    const withPhoto = products.filter(p => p.image).length;
-    document.getElementById('statPhotos').textContent = withPhoto;
+    const photoCount = products.reduce((total, p) => total + productImages(p).length, 0);
+    document.getElementById('statPhotos').textContent = photoCount;
 }
 
 /* ── CATEGORY TABS ──────────────────────────────────────── */
@@ -376,16 +452,29 @@ const CAT_PV = {
     organizacao: 'pv-org', gadgets: 'pv-gadgets', personalizados: 'pv-custom',
 };
 
+function productImages(p) {
+    return (Array.isArray(p.images) && p.images.length)
+        ? p.images.filter(Boolean)
+        : (p.image ? [p.image] : []);
+}
+
 function cardHTML(p) {
-    const imgTag = p.image
-        ? `<img src="${CLD_URL(p.image, 300, 220)}" alt="${esc(p.name)}" loading="lazy">`
+    const images = productImages(p);
+    const imgTag = images[0]
+        ? `<img src="${CLD_URL(images[0], 300, 220)}" alt="${esc(p.name)}" loading="lazy">`
         : `<span>${p.emoji || '📦'}</span>`;
     const price = p.price != null
         ? `<strong>R$ ${Number(p.price).toFixed(2).replace('.', ',')}</strong>`
         : 'Consultar preço';
-    const photoBadge = p.image
-        ? `<span class="has-photo-badge">✓ Foto</span>`
+    const photoBadge = images.length
+        ? `<span class="has-photo-badge">${images.length} foto${images.length > 1 ? 's' : ''}</span>`
         : `<span class="no-photo-badge">Sem foto</span>`;
+    const dims = p.dimensions || {};
+    const specs = [
+        p.material ? esc(p.material) : null,
+        p.weight ? `${p.weight} g` : null,
+        (dims.length && dims.width && dims.height) ? `${dims.length}x${dims.width}x${dims.height} cm` : null,
+    ].filter(Boolean);
     const pvClass = CAT_PV[p.category] || 'pv-geek';
 
     return `
@@ -398,6 +487,7 @@ function cardHTML(p) {
             <p class="admin-card-cat">${CAT_LABELS[p.category] || p.category}</p>
             <h3 class="admin-card-name">${esc(p.name)}</h3>
             <p class="admin-card-price">${price}</p>
+            ${specs.length ? `<div class="admin-card-specs">${specs.map(item => `<span>${item}</span>`).join('')}</div>` : ''}
         </div>
         <div class="admin-card-actions">
             <button class="btn btn-edit btn-sm edit-btn" data-id="${p.id}">✏ Editar</button>
@@ -802,6 +892,10 @@ productForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Salvando...';
+
     const priceVal = document.getElementById('fPrice').value;
     const coverImage = document.getElementById('imagePublicId').value.trim();
     const images = [coverImage, ...extraImages.map(img => img.trim())]
@@ -809,7 +903,7 @@ productForm.addEventListener('submit', async e => {
         .filter((img, index, arr) => arr.indexOf(img) === index);
     const existing = editingId != null ? products.find(p => p.id === editingId) : null;
     const product = {
-        id: editingId ?? nextId(),
+        id: editingId ?? undefined,
         name: document.getElementById('fName').value.trim(),
         category: document.getElementById('fCategory').value,
         price: priceVal !== '' ? parseFloat(priceVal) : null,
@@ -830,30 +924,32 @@ productForm.addEventListener('submit', async e => {
         reviews: existing?.reviews ?? 0,
     };
 
-    if (editingId != null) {
-        const idx = products.findIndex(p => p.id === editingId);
-        if (idx !== -1) products[idx] = product;
-        await recordAdminAudit('update', 'product', product.id, {
-            nome: product.name,
-            categoria: product.category,
-            preco: product.price ? `R$ ${product.price}` : 'Não definido',
-        });
-        showToast('Produto atualizado!');
-    } else {
-        products.push(product);
-        await recordAdminAudit('create', 'product', product.id, {
-            nome: product.name,
-            categoria: product.category,
-            preco: product.price ? `R$ ${product.price}` : 'Não definido',
-        });
-        showToast('Produto adicionado!');
-    }
+    try {
+        const savedProduct = normalizeProductList([await saveProductOnServer(product, editingId)])[0];
 
-    saveProducts();
-    closeModal();
-    renderGrid();
-    updateStats();
-    updateQuoteProductOptions();
+        if (editingId != null) {
+            const idx = products.findIndex(p => p.id === editingId);
+            if (idx !== -1) products[idx] = savedProduct;
+            showToast('Produto atualizado e publicado!');
+        } else {
+            products.push(savedProduct);
+            showToast('Produto adicionado e publicado!');
+        }
+
+        saveProductsCache();
+        closeModal();
+        renderGrid();
+        updateStats();
+        updateQuoteProductOptions();
+    } catch (err) {
+        showToast(err.message || 'Erro ao salvar produto.', 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Salvar produto
+        `;
+    }
 });
 
 /* ── DELETE ─────────────────────────────────────────────── */
@@ -885,18 +981,26 @@ confirmOverlay.addEventListener('click', e => {
 doDelete.addEventListener('click', async () => {
     if (pendingDeleteId == null) return;
     const deletedProduct = products.find(p => p.id === pendingDeleteId);
-    products = products.filter(p => p.id !== pendingDeleteId);
-    await recordAdminAudit('delete', 'product', pendingDeleteId, deletedProduct ? {
-        nome: deletedProduct.name,
-        categoria: deletedProduct.category,
-    } : {});
-    saveProducts();
-    confirmOverlay.classList.add('hidden');
-    pendingDeleteId = null;
-    renderGrid();
-    updateStats();
-    updateQuoteProductOptions();
-    showToast('Produto excluído.');
+
+    doDelete.disabled = true;
+    doDelete.textContent = 'Excluindo...';
+
+    try {
+        await deleteProductOnServer(pendingDeleteId);
+        products = products.filter(p => p.id !== pendingDeleteId);
+        saveProductsCache();
+        confirmOverlay.classList.add('hidden');
+        pendingDeleteId = null;
+        renderGrid();
+        updateStats();
+        updateQuoteProductOptions();
+        showToast(deletedProduct ? `"${deletedProduct.name}" excluído.` : 'Produto excluído.');
+    } catch (err) {
+        showToast(err.message || 'Erro ao excluir produto.', 'error');
+    } finally {
+        doDelete.disabled = false;
+        doDelete.textContent = 'Excluir';
+    }
 });
 
 /* ── TOAST ──────────────────────────────────────────────── */

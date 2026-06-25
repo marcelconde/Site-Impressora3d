@@ -272,6 +272,21 @@ label { font-size: .82rem; font-weight: 600; color: var(--text2); letter-spacing
 .admin-card-name { font-weight: 700; font-size: .95rem; margin-bottom: 4px; }
 .admin-card-price { font-size: .82rem; color: var(--text2); }
 .admin-card-price strong { color: var(--text); }
+.admin-card-specs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 9px;
+}
+.admin-card-specs span {
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.045);
+    border: 1px solid var(--border2);
+    color: var(--text3);
+    font-size: .68rem;
+    font-weight: 700;
+}
 
 .admin-card-actions {
     display: flex; gap: 8px;
@@ -363,7 +378,7 @@ label { font-size: .82rem; font-weight: 600; color: var(--text2); letter-spacing
     transition: all var(--trans); background: var(--bg3);
 }
 .image-upload-box:hover { border-color: var(--purple); background: rgba(124,58,237,.05); }
-.image-upload-box.dragover { border-color: var(--cyan); background: rgba(14,165,233,.05); }
+.image-upload-box.drag-over { border-color: var(--cyan); background: rgba(14,165,233,.05); }
 
 .upload-ph {
     display: flex; flex-direction: column; align-items: center;
