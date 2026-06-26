@@ -154,6 +154,19 @@ function productThumbImageUrl(publicId) {
     return CLOUDINARY.url(publicId, { width: 180, height: 135, crop: 'fill' });
 }
 
+function normalizeShippingName(value = '') {
+    return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+}
+
+function isAllowedShippingOption(opt = {}) {
+    const name = normalizeShippingName(opt.name);
+    if (name.includes('JADLOG')) return true;
+    return name.includes('CORREIOS') && (name.includes('PAC') || name.includes('SEDEX'));
+}
+
 /* =============================================
    PRELOADER
    ============================================= */
@@ -803,12 +816,21 @@ function setupShippingCalculator(p, onSelect = () => {}) {
                 return;
             }
 
-            const options = data.options.map(opt => ({
-                name: opt.name || 'Envio',
-                price: opt.price || 'A confirmar',
-                deadline: opt.deadline || 'Prazo a confirmar',
-                cep: cepInput.value,
-            }));
+            const options = data.options
+                .filter(isAllowedShippingOption)
+                .map(opt => ({
+                    name: opt.name || 'Envio',
+                    price: opt.price || 'A confirmar',
+                    deadline: opt.deadline || 'Prazo a confirmar',
+                    cep: cepInput.value,
+                }));
+
+            if (!options.length) {
+                result.textContent = 'Nenhuma opção PAC, SEDEX ou Jadlog disponível para este CEP.';
+                result.className = 'shipping-result error';
+                onSelect(null);
+                return;
+            }
 
             result.className = 'shipping-result ok';
             result.innerHTML = options.map((opt, index) => `

@@ -374,6 +374,25 @@ function positiveNumber(value, fallback = 0) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function normalizeShippingName(value = '') {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+function isAllowedShippingOption(item = {}) {
+  const company = normalizeShippingName(item.company?.name);
+  const service = normalizeShippingName(item.name);
+
+  if (company.includes('JADLOG')) return true;
+  if (company.includes('CORREIOS')) {
+    return service.includes('PAC') || service.includes('SEDEX');
+  }
+
+  return false;
+}
+
 async function quoteShipping(env, payload = {}) {
   if (!env.MELHOR_ENVIO_TOKEN || !env.ORIGIN_CEP) {
     return {
@@ -440,7 +459,7 @@ async function quoteShipping(env, payload = {}) {
   }
 
   const options = data
-    .filter(item => !item.error && item.price)
+    .filter(item => !item.error && item.price && isAllowedShippingOption(item))
     .map(item => ({
       id: item.id,
       name: `${item.company?.name || 'Transportadora'} ${item.name || ''}`.trim(),
