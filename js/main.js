@@ -103,6 +103,7 @@ const CLD_BASE = 'Produtos';
 const SITE_SETTINGS_URL = 'https://api.forgecon.com.br/settings';
 const SHIPPING_QUOTE_URL = 'https://api.forgecon.com.br/shipping/quote';
 const CART_STORAGE_KEY = 'forgecon_cart';
+const VIA_CEP_URL = 'https://viacep.com.br/ws';
 const DEFAULT_WHATSAPP_MESSAGE = 'Olá, vim pelo site e gostaria de solicitar um orçamento';
 let SITE_SETTINGS = {
     whatsapp: '11 95028-0670',
@@ -129,6 +130,21 @@ function moneyBRL(value) {
     const n = Number(value);
     if (!Number.isFinite(n) || n <= 0) return 'Consultar preço';
     return `R$ ${n.toFixed(2).replace('.', ',')}`;
+}
+
+function parseBRL(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const normalized = String(value || '')
+        .replace(/[^\d,.-]/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatCep(value = '') {
+    const digits = String(value).replace(/\D/g, '').slice(0, 8);
+    return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
 }
 
 function normalizePhoneDigits(value) {
@@ -545,11 +561,24 @@ function cartProductsTotal() {
     }, 0);
 }
 
+function shippingValue(item) {
+    return Number(item.shipping?.amount || 0) || parseBRL(item.shipping?.price);
+}
+
+function cartShippingTotal() {
+    return cartItems.reduce((total, item) => total + shippingValue(item), 0);
+}
+
+function cartGrandTotal() {
+    return cartProductsTotal() + cartShippingTotal();
+}
+
 function sameCartItem(a, b) {
     return String(a.productId) === String(b.productId)
         && String(a.color || '') === String(b.color || '')
         && String(a.cep || '') === String(b.cep || '')
-        && String(a.shipping?.name || '') === String(b.shipping?.name || '');
+        && String(a.shipping?.name || '') === String(b.shipping?.name || '')
+        && shippingValue(a).toFixed(2) === shippingValue(b).toFixed(2);
 }
 
 function addToCart(item, { open = true } = {}) {
@@ -578,7 +607,42 @@ function updateCartQty(key, nextQty) {
     saveCartItems();
 }
 
-function buildCartMessage() {
+function getDeliveryData() {
+    return {
+        name: document.getElementById('cartCustomerName')?.value.trim() || '',
+        phone: document.getElementById('cartCustomerPhone')?.value.trim() || '',
+        cep: formatCep(document.getElementById('cartDeliveryCep')?.value || ''),
+        street: document.getElementById('cartStreet')?.value.trim() || '',
+        number: document.getElementById('cartNumber')?.value.trim() || '',
+        complement: document.getElementById('cartComplement')?.value.trim() || '',
+        neighborhood: document.getElementById('cartNeighborhood')?.value.trim() || '',
+        city: document.getElementById('cartCity')?.value.trim() || '',
+        state: document.getElementById('cartState')?.value.trim().toUpperCase() || '',
+        reference: document.getElementById('cartReference')?.value.trim() || '',
+    };
+}
+
+function validateDeliveryData(delivery) {
+    const required = [
+        ['name', 'nome'],
+        ['phone', 'WhatsApp'],
+        ['cep', 'CEP'],
+        ['street', 'rua'],
+        ['number', 'número'],
+        ['neighborhood', 'bairro'],
+        ['city', 'cidade'],
+        ['state', 'estado'],
+    ];
+    const missing = required.filter(([key]) => !delivery[key]).map(([, label]) => label);
+    return missing.length ? `Preencha os dados de entrega: ${missing.join(', ')}.` : '';
+}
+
+function setCartFormError(message = '') {
+    const error = document.getElementById('cartFormError');
+    if (error) error.textContent = message;
+}
+
+function buildCartMessage(delivery = getDeliveryData()) {
     const lines = [
         'Olá, vim pelo site e gostaria de solicitar um orçamento/pedido com estes itens:',
         '',
@@ -589,18 +653,35 @@ function buildCartMessage() {
         lines.push(`Quantidade: ${item.qty || 1}`);
         if (item.color) lines.push(`Cor: ${item.color}`);
         if (item.price) lines.push(`Valor unitário: ${moneyBRL(item.price)}`);
-        if (item.cep) lines.push(`CEP: ${item.cep}`);
         if (item.shipping?.name) {
             lines.push(`Frete selecionado: ${item.shipping.name} - ${item.shipping.price} (${item.shipping.deadline})`);
+        } else {
+            lines.push('Frete selecionado: a calcular');
         }
         lines.push('');
     });
 
-    const total = cartProductsTotal();
-    if (total > 0) {
-        lines.push(`Subtotal dos produtos: ${moneyBRL(total)}`);
-        lines.push('Frete e personalizações podem alterar o valor final.');
+    const productsTotal = cartProductsTotal();
+    const shippingTotal = cartShippingTotal();
+    const grandTotal = cartGrandTotal();
+    if (productsTotal > 0) {
+        lines.push(`Subtotal dos produtos: ${moneyBRL(productsTotal)}`);
+        lines.push(`Total de frete selecionado: ${shippingTotal > 0 ? moneyBRL(shippingTotal) : 'a calcular'}`);
+        lines.push(`Total estimado: ${grandTotal > 0 ? moneyBRL(grandTotal) : 'a confirmar'}`);
+        lines.push('');
     }
+
+    lines.push('Dados para entrega:');
+    lines.push(`Nome: ${delivery.name}`);
+    lines.push(`WhatsApp: ${delivery.phone}`);
+    lines.push(`CEP: ${delivery.cep}`);
+    lines.push(`Endereço: ${delivery.street}, ${delivery.number}`);
+    if (delivery.complement) lines.push(`Complemento: ${delivery.complement}`);
+    lines.push(`Bairro: ${delivery.neighborhood}`);
+    lines.push(`Cidade/UF: ${delivery.city}/${delivery.state}`);
+    if (delivery.reference) lines.push(`Referência: ${delivery.reference}`);
+    lines.push('');
+    lines.push('Personalizações e disponibilidade podem ser confirmadas no atendimento.');
 
     return lines.join('\n').trim();
 }
@@ -610,7 +691,16 @@ function checkoutCart() {
         alert('Adicione pelo menos um produto ao carrinho.');
         return;
     }
-    window.open(whatsappUrl(buildCartMessage()), '_blank', 'noopener');
+    const delivery = getDeliveryData();
+    const validation = validateDeliveryData(delivery);
+    if (validation) {
+        setCartFormError(validation);
+        openCartDrawer();
+        document.getElementById('cartDelivery')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+    setCartFormError('');
+    window.open(whatsappUrl(buildCartMessage(delivery)), '_blank', 'noopener');
 }
 
 function ensureCartUI() {
@@ -631,9 +721,36 @@ function ensureCartUI() {
                 <button type="button" id="cartClose" aria-label="Fechar carrinho">×</button>
             </div>
             <div class="cart-list" id="cartList"></div>
+            <div class="cart-delivery" id="cartDelivery">
+                <div class="cart-delivery-head">
+                    <span>Entrega</span>
+                    <small>Esses dados serão enviados no WhatsApp.</small>
+                </div>
+                <div class="cart-delivery-grid">
+                    <label>Nome completo<input class="cart-input" id="cartCustomerName" type="text" autocomplete="name"></label>
+                    <label>WhatsApp<input class="cart-input" id="cartCustomerPhone" type="tel" autocomplete="tel"></label>
+                    <label>CEP<input class="cart-input" id="cartDeliveryCep" type="text" inputmode="numeric" maxlength="9" autocomplete="postal-code"></label>
+                    <label>Rua<input class="cart-input" id="cartStreet" type="text" autocomplete="address-line1"></label>
+                    <label>Número<input class="cart-input" id="cartNumber" type="text" autocomplete="address-line2"></label>
+                    <label>Complemento<input class="cart-input" id="cartComplement" type="text"></label>
+                    <label>Bairro<input class="cart-input" id="cartNeighborhood" type="text"></label>
+                    <label>Cidade<input class="cart-input" id="cartCity" type="text" autocomplete="address-level2"></label>
+                    <label>UF<input class="cart-input" id="cartState" type="text" maxlength="2" autocomplete="address-level1"></label>
+                    <label class="cart-field-full">Referência<input class="cart-input" id="cartReference" type="text" placeholder="Ex: portão azul, bloco, ponto próximo"></label>
+                </div>
+                <p class="cart-form-error" id="cartFormError"></p>
+            </div>
             <div class="cart-foot">
                 <div class="cart-total">
-                    <span>Subtotal</span>
+                    <span>Produtos</span>
+                    <strong id="cartProductsTotal">Consultar</strong>
+                </div>
+                <div class="cart-total">
+                    <span>Frete</span>
+                    <strong id="cartShippingTotal">A calcular</strong>
+                </div>
+                <div class="cart-total cart-total-final">
+                    <span>Total estimado</span>
                     <strong id="cartTotal">Consultar</strong>
                 </div>
                 <button class="btn btn-primary" type="button" id="cartCheckout">Enviar pedido pelo WhatsApp</button>
@@ -647,6 +764,7 @@ function ensureCartUI() {
     document.getElementById('cartClose')?.addEventListener('click', closeCartDrawer);
     document.getElementById('cartContinue')?.addEventListener('click', closeCartDrawer);
     document.getElementById('cartCheckout')?.addEventListener('click', checkoutCart);
+    setupCartDeliveryForm();
     renderCartUI();
 }
 
@@ -667,9 +785,23 @@ function renderCartUI() {
 
     const list = document.getElementById('cartList');
     const totalEl = document.getElementById('cartTotal');
-    if (!list || !totalEl) return;
+    const productsTotalEl = document.getElementById('cartProductsTotal');
+    const shippingTotalEl = document.getElementById('cartShippingTotal');
+    if (!list || !totalEl || !productsTotalEl || !shippingTotalEl) return;
 
-    totalEl.textContent = cartProductsTotal() > 0 ? moneyBRL(cartProductsTotal()) : 'Consultar';
+    const productsTotal = cartProductsTotal();
+    const shippingTotal = cartShippingTotal();
+    const grandTotal = cartGrandTotal();
+    productsTotalEl.textContent = productsTotal > 0 ? moneyBRL(productsTotal) : 'Consultar';
+    shippingTotalEl.textContent = shippingTotal > 0 ? moneyBRL(shippingTotal) : 'A calcular';
+    totalEl.textContent = grandTotal > 0 ? moneyBRL(grandTotal) : 'Consultar';
+
+    const deliveryCep = document.getElementById('cartDeliveryCep');
+    const firstCep = cartItems.find(item => item.cep)?.cep;
+    if (deliveryCep && firstCep && !deliveryCep.value.trim()) {
+        deliveryCep.value = formatCep(firstCep);
+        lookupDeliveryCep(firstCep);
+    }
 
     if (!cartItems.length) {
         list.innerHTML = `
@@ -690,7 +822,7 @@ function renderCartUI() {
                 <div class="cart-item-body">
                     <strong>${escapeHTML(item.name)}</strong>
                     <p>${item.color ? `Cor: ${escapeHTML(item.color)}` : 'Cor a combinar'}</p>
-                    ${item.shipping?.name ? `<p>Frete: ${escapeHTML(item.shipping.name)} • ${escapeHTML(item.shipping.price)}</p>` : ''}
+                    ${item.shipping?.name ? `<p>Frete: ${escapeHTML(item.shipping.name)} • ${escapeHTML(item.shipping.price)}</p>` : '<p>Frete: a calcular</p>'}
                     <div class="cart-item-actions">
                         <button type="button" class="cart-qty" data-cart-dec>-</button>
                         <span>${item.qty || 1}</span>
@@ -698,7 +830,10 @@ function renderCartUI() {
                         <button type="button" class="cart-remove" data-cart-remove>Remover</button>
                     </div>
                 </div>
-                <div class="cart-item-price">${item.price ? moneyBRL(Number(item.price) * Number(item.qty || 1)) : 'Consultar'}</div>
+                <div class="cart-item-price">
+                    ${item.price ? moneyBRL(Number(item.price) * Number(item.qty || 1)) : 'Consultar'}
+                    ${shippingValue(item) > 0 ? `<small>+ ${moneyBRL(shippingValue(item))} frete</small>` : ''}
+                </div>
             </div>`;
     }).join('');
 
@@ -708,6 +843,55 @@ function renderCartUI() {
         row.querySelector('[data-cart-dec]')?.addEventListener('click', () => updateCartQty(key, Number(item?.qty || 1) - 1));
         row.querySelector('[data-cart-inc]')?.addEventListener('click', () => updateCartQty(key, Number(item?.qty || 1) + 1));
         row.querySelector('[data-cart-remove]')?.addEventListener('click', () => removeFromCart(key));
+    });
+}
+
+async function lookupDeliveryCep(cepValue) {
+    const cep = String(cepValue || '').replace(/\D/g, '');
+    if (cep.length !== 8) return;
+
+    try {
+        const res = await fetch(`${VIA_CEP_URL}/${cep}/json/`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.erro) return;
+
+        const fields = {
+            cartStreet: data.logradouro,
+            cartNeighborhood: data.bairro,
+            cartCity: data.localidade,
+            cartState: data.uf,
+        };
+
+        Object.entries(fields).forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (input && value && !input.value.trim()) input.value = value;
+        });
+    } catch {
+        // CEP lookup is convenience only; checkout still works with manual data.
+    }
+}
+
+function setupCartDeliveryForm() {
+    const cep = document.getElementById('cartDeliveryCep');
+    const state = document.getElementById('cartState');
+    const phone = document.getElementById('cartCustomerPhone');
+
+    cep?.addEventListener('input', () => {
+        cep.value = formatCep(cep.value);
+        setCartFormError('');
+        if (cep.value.replace(/\D/g, '').length === 8) lookupDeliveryCep(cep.value);
+    });
+
+    state?.addEventListener('input', () => {
+        state.value = state.value.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
+    });
+
+    phone?.addEventListener('input', () => {
+        setCartFormError('');
+    });
+
+    document.querySelectorAll('.cart-input').forEach(input => {
+        input.addEventListener('input', () => setCartFormError(''));
     });
 }
 
@@ -821,6 +1005,7 @@ function setupShippingCalculator(p, onSelect = () => {}) {
                 .map(opt => ({
                     name: opt.name || 'Envio',
                     price: opt.price || 'A confirmar',
+                    amount: parseBRL(opt.price),
                     deadline: opt.deadline || 'Prazo a confirmar',
                     cep: cepInput.value,
                 }));
