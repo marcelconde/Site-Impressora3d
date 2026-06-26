@@ -102,10 +102,57 @@ const CATEGORY_LABELS = {
 const CLD_BASE = 'Produtos';
 const SITE_SETTINGS_URL = 'https://api.forgecon.com.br/settings';
 const SHIPPING_QUOTE_URL = 'https://api.forgecon.com.br/shipping/quote';
+const CART_STORAGE_KEY = 'forgecon_cart';
+const DEFAULT_WHATSAPP_MESSAGE = 'Olá, vim pelo site e gostaria de solicitar um orçamento';
+let SITE_SETTINGS = {
+    whatsapp: '11 95028-0670',
+    email: 'contato@forgecon.com.br',
+    instagram: '@_forgecon_',
+    shopee: '',
+    mercadolivre: '',
+};
 
 const TESTIMONIALS = [
     { name:'Marcel Conde',     city:'Recife, PE',           rating:5, avatar:'MC', text:'Vamo fazer essa porra funcionar mano' },
 ];
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function moneyBRL(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 'Consultar preço';
+    return `R$ ${n.toFixed(2).replace('.', ',')}`;
+}
+
+function normalizePhoneDigits(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.startsWith('55') ? digits : `55${digits}`;
+}
+
+function whatsappUrl(message = DEFAULT_WHATSAPP_MESSAGE) {
+    const phone = normalizePhoneDigits(SITE_SETTINGS.whatsapp);
+    return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : '#';
+}
+
+function productCardImageUrl(publicId) {
+    return CLOUDINARY.url(publicId, { width: 600, height: 450, crop: 'fill' });
+}
+
+function productMainImageUrl(publicId) {
+    return CLOUDINARY.url(publicId, { width: 1200, height: 900, crop: 'fit' });
+}
+
+function productThumbImageUrl(publicId) {
+    return CLOUDINARY.url(publicId, { width: 180, height: 135, crop: 'fill' });
+}
 
 /* =============================================
    PRELOADER
@@ -361,7 +408,7 @@ function productImages(p) {
 
 function productPreview(p) {
     const images = productImages(p);
-    const imgUrl = CLOUDINARY.url(images[0], { width: 600, height: 450 });
+    const imgUrl = productCardImageUrl(images[0]);
     const photoCount = images.length > 1
         ? `<div class="product-photo-count">${images.length} fotos</div>`
         : '';
@@ -393,7 +440,7 @@ function renderProducts(filter = 'all') {
                 <p class="product-desc">${p.desc}</p>
                 <div class="product-footer">
                     <div class="product-price">
-                        ${p.price ? `R$ ${p.price.toFixed(2).replace('.',',')}` : 'Consultar preço'}
+                        ${moneyBRL(p.price)}
                         <small>+ frete • personalizável</small>
                     </div>
                     <div class="product-rating">
@@ -456,6 +503,204 @@ if (grid) {
 }
 
 /* =============================================
+   CART — PRODUCT FLOW WITHOUT LEAVING THE MODAL
+   ============================================= */
+let cartItems = loadCartItems();
+
+function loadCartItems() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
+        return Array.isArray(saved) ? saved : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveCartItems() {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
+    renderCartUI();
+}
+
+function cartQuantity() {
+    return cartItems.reduce((total, item) => total + Number(item.qty || 1), 0);
+}
+
+function cartProductsTotal() {
+    return cartItems.reduce((total, item) => {
+        const price = Number(item.price || 0);
+        return total + price * Number(item.qty || 1);
+    }, 0);
+}
+
+function sameCartItem(a, b) {
+    return String(a.productId) === String(b.productId)
+        && String(a.color || '') === String(b.color || '')
+        && String(a.cep || '') === String(b.cep || '')
+        && String(a.shipping?.name || '') === String(b.shipping?.name || '');
+}
+
+function addToCart(item, { open = true } = {}) {
+    const existing = cartItems.find(current => sameCartItem(current, item));
+    if (existing) {
+        existing.qty = Number(existing.qty || 1) + Number(item.qty || 1);
+    } else {
+        cartItems.push({
+            ...item,
+            key: `${item.productId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        });
+    }
+    saveCartItems();
+    if (open) openCartDrawer();
+}
+
+function removeFromCart(key) {
+    cartItems = cartItems.filter(item => item.key !== key);
+    saveCartItems();
+}
+
+function updateCartQty(key, nextQty) {
+    const item = cartItems.find(entry => entry.key === key);
+    if (!item) return;
+    item.qty = Math.max(1, Number(nextQty) || 1);
+    saveCartItems();
+}
+
+function buildCartMessage() {
+    const lines = [
+        'Olá, vim pelo site e gostaria de solicitar um orçamento/pedido com estes itens:',
+        '',
+    ];
+
+    cartItems.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.name}`);
+        lines.push(`Quantidade: ${item.qty || 1}`);
+        if (item.color) lines.push(`Cor: ${item.color}`);
+        if (item.price) lines.push(`Valor unitário: ${moneyBRL(item.price)}`);
+        if (item.cep) lines.push(`CEP: ${item.cep}`);
+        if (item.shipping?.name) {
+            lines.push(`Frete selecionado: ${item.shipping.name} - ${item.shipping.price} (${item.shipping.deadline})`);
+        }
+        lines.push('');
+    });
+
+    const total = cartProductsTotal();
+    if (total > 0) {
+        lines.push(`Subtotal dos produtos: ${moneyBRL(total)}`);
+        lines.push('Frete e personalizações podem alterar o valor final.');
+    }
+
+    return lines.join('\n').trim();
+}
+
+function checkoutCart() {
+    if (!cartItems.length) {
+        alert('Adicione pelo menos um produto ao carrinho.');
+        return;
+    }
+    window.open(whatsappUrl(buildCartMessage()), '_blank', 'noopener');
+}
+
+function ensureCartUI() {
+    if (document.getElementById('cartDrawer')) return;
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <button class="cart-fab" id="cartFab" type="button" aria-label="Abrir carrinho">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.5L21 8H7"/></svg>
+            <span id="cartCount">0</span>
+        </button>
+        <div class="cart-overlay" id="cartOverlay" aria-hidden="true"></div>
+        <aside class="cart-drawer" id="cartDrawer" aria-label="Carrinho">
+            <div class="cart-head">
+                <div>
+                    <span>Carrinho</span>
+                    <strong>Pedido pelo WhatsApp</strong>
+                </div>
+                <button type="button" id="cartClose" aria-label="Fechar carrinho">×</button>
+            </div>
+            <div class="cart-list" id="cartList"></div>
+            <div class="cart-foot">
+                <div class="cart-total">
+                    <span>Subtotal</span>
+                    <strong id="cartTotal">Consultar</strong>
+                </div>
+                <button class="btn btn-primary" type="button" id="cartCheckout">Enviar pedido pelo WhatsApp</button>
+                <button class="btn btn-outline" type="button" id="cartContinue">Continuar escolhendo</button>
+            </div>
+        </aside>
+    `);
+
+    document.getElementById('cartFab')?.addEventListener('click', openCartDrawer);
+    document.getElementById('cartOverlay')?.addEventListener('click', closeCartDrawer);
+    document.getElementById('cartClose')?.addEventListener('click', closeCartDrawer);
+    document.getElementById('cartContinue')?.addEventListener('click', closeCartDrawer);
+    document.getElementById('cartCheckout')?.addEventListener('click', checkoutCart);
+    renderCartUI();
+}
+
+function openCartDrawer() {
+    ensureCartUI();
+    document.getElementById('cartOverlay')?.classList.add('open');
+    document.getElementById('cartDrawer')?.classList.add('open');
+}
+
+function closeCartDrawer() {
+    document.getElementById('cartOverlay')?.classList.remove('open');
+    document.getElementById('cartDrawer')?.classList.remove('open');
+}
+
+function renderCartUI() {
+    const count = document.getElementById('cartCount');
+    if (count) count.textContent = cartQuantity();
+
+    const list = document.getElementById('cartList');
+    const totalEl = document.getElementById('cartTotal');
+    if (!list || !totalEl) return;
+
+    totalEl.textContent = cartProductsTotal() > 0 ? moneyBRL(cartProductsTotal()) : 'Consultar';
+
+    if (!cartItems.length) {
+        list.innerHTML = `
+            <div class="cart-empty">
+                <strong>Nenhum produto selecionado</strong>
+                <p>Escolha um produto, selecione a cor e adicione ao carrinho.</p>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = cartItems.map(item => {
+        const img = item.image ? productThumbImageUrl(item.image) : '';
+        return `
+            <div class="cart-item" data-key="${escapeHTML(item.key)}">
+                <div class="cart-item-img">
+                    ${img ? `<img src="${img}" alt="${escapeHTML(item.name)}">` : `<span>${escapeHTML(item.emoji || '📦')}</span>`}
+                </div>
+                <div class="cart-item-body">
+                    <strong>${escapeHTML(item.name)}</strong>
+                    <p>${item.color ? `Cor: ${escapeHTML(item.color)}` : 'Cor a combinar'}</p>
+                    ${item.shipping?.name ? `<p>Frete: ${escapeHTML(item.shipping.name)} • ${escapeHTML(item.shipping.price)}</p>` : ''}
+                    <div class="cart-item-actions">
+                        <button type="button" class="cart-qty" data-cart-dec>-</button>
+                        <span>${item.qty || 1}</span>
+                        <button type="button" class="cart-qty" data-cart-inc>+</button>
+                        <button type="button" class="cart-remove" data-cart-remove>Remover</button>
+                    </div>
+                </div>
+                <div class="cart-item-price">${item.price ? moneyBRL(Number(item.price) * Number(item.qty || 1)) : 'Consultar'}</div>
+            </div>`;
+    }).join('');
+
+    list.querySelectorAll('.cart-item').forEach(row => {
+        const key = row.dataset.key;
+        const item = cartItems.find(entry => entry.key === key);
+        row.querySelector('[data-cart-dec]')?.addEventListener('click', () => updateCartQty(key, Number(item?.qty || 1) - 1));
+        row.querySelector('[data-cart-inc]')?.addEventListener('click', () => updateCartQty(key, Number(item?.qty || 1) + 1));
+        row.querySelector('[data-cart-remove]')?.addEventListener('click', () => removeFromCart(key));
+    });
+}
+
+ensureCartUI();
+
+/* =============================================
    PRODUCT MODAL
    ============================================= */
 const modal     = document.getElementById('productModal');
@@ -478,8 +723,8 @@ function productSpecsHTML(p) {
             <div class="modal-specs-grid">
                 ${specs.map(([label, value]) => `
                     <div class="modal-spec">
-                        <span>${label}</span>
-                        <strong>${value}</strong>
+                        <span>${escapeHTML(label)}</span>
+                        <strong>${escapeHTML(value)}</strong>
                     </div>
                 `).join('')}
             </div>
@@ -518,7 +763,7 @@ function shippingPayload(p, cep) {
     };
 }
 
-function setupShippingCalculator(p) {
+function setupShippingCalculator(p, onSelect = () => {}) {
     const cepInput = document.getElementById('shippingCep');
     const btn = document.getElementById('shippingBtn');
     const result = document.getElementById('shippingResult');
@@ -534,6 +779,7 @@ function setupShippingCalculator(p) {
         if (cep.length !== 8) {
             result.textContent = 'Digite um CEP válido com 8 números.';
             result.className = 'shipping-result error';
+            onSelect(null);
             return;
         }
 
@@ -553,20 +799,43 @@ function setupShippingCalculator(p) {
             if (!res.ok || !data.options?.length) {
                 result.textContent = 'Frete será confirmado no atendimento.';
                 result.className = 'shipping-result error';
+                onSelect(null);
                 return;
             }
 
+            const options = data.options.map(opt => ({
+                name: opt.name || 'Envio',
+                price: opt.price || 'A confirmar',
+                deadline: opt.deadline || 'Prazo a confirmar',
+                cep: cepInput.value,
+            }));
+
             result.className = 'shipping-result ok';
-            result.innerHTML = data.options.map(opt => `
-                <div class="shipping-option">
-                    <span>${opt.name}</span>
-                    <strong>${opt.price}</strong>
-                    <small>${opt.deadline}</small>
-                </div>
+            result.innerHTML = options.map((opt, index) => `
+                <button type="button" class="shipping-option${index === 0 ? ' active' : ''}" data-shipping-index="${index}">
+                    <span>${escapeHTML(opt.name)}</span>
+                    <strong>${escapeHTML(opt.price)}</strong>
+                    <small>${escapeHTML(opt.deadline)}</small>
+                </button>
             `).join('');
+
+            const selectShipping = index => {
+                const option = options[index];
+                if (!option) return;
+                result.querySelectorAll('.shipping-option').forEach(el => {
+                    el.classList.toggle('active', Number(el.dataset.shippingIndex) === index);
+                });
+                onSelect(option);
+            };
+
+            result.querySelectorAll('.shipping-option').forEach(el => {
+                el.addEventListener('click', () => selectShipping(Number(el.dataset.shippingIndex || 0)));
+            });
+            selectShipping(0);
         } catch {
             result.textContent = 'Frete será confirmado no atendimento.';
             result.className = 'shipping-result error';
+            onSelect(null);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Calcular';
@@ -582,10 +851,14 @@ function openModal(id) {
     const allImages = productImages(p)
         .filter(Boolean)
         .filter((img, index, arr) => arr.indexOf(img) === index);
+    let activeImageIndex = 0;
+    let selectedColor = (p.colors || [])[0] || '';
+    let selectedShipping = null;
+    let selectedQty = 1;
     const modalPreview = allImages.length
         ? `<div class="modal-gallery" data-gallery-count="${allImages.length}">
             <div class="modal-gallery-main">
-                <img id="mgMain" src="${CLOUDINARY.url(allImages[0], {width:800,height:500})}" alt="${p.name}">
+                <img id="mgMain" src="${productMainImageUrl(allImages[0])}" alt="${escapeHTML(p.name)}">
                 ${allImages.length > 1 ? `
                     <button class="mg-nav mg-prev" type="button" aria-label="Foto anterior">‹</button>
                     <button class="mg-nav mg-next" type="button" aria-label="Próxima foto">›</button>
@@ -593,10 +866,10 @@ function openModal(id) {
                 ` : ''}
             </div>
             ${allImages.length > 1 ? `<div class="modal-gallery-thumbs">
-                ${allImages.map((img, i) => `<img src="${CLOUDINARY.url(img, {width:120,height:90})}" class="mg-thumb${i===0?' active':''}" data-i="${i}" data-full="${CLOUDINARY.url(img, {width:800,height:500})}" alt="${p.name} ${i+1}">`).join('')}
+                ${allImages.map((img, i) => `<img src="${productThumbImageUrl(img)}" class="mg-thumb${i===0?' active':''}" data-i="${i}" alt="${escapeHTML(p.name)} ${i+1}">`).join('')}
             </div>` : ''}
            </div>`
-        : `<div class="modal-preview ${pvClass(p.category)}">${p.emoji || '📦'}</div>`;
+        : `<div class="modal-preview ${pvClass(p.category)}">${escapeHTML(p.emoji || '📦')}</div>`;
 
     modalBody.innerHTML = `
         <div class="modal-product-layout">
@@ -604,24 +877,37 @@ function openModal(id) {
                 ${modalPreview}
             </div>
             <div class="modal-info">
-                <div class="modal-category">${CATEGORY_LABELS[p.category]}</div>
-                <h3>${p.name}</h3>
-                <p class="modal-desc">${p.desc}</p>
+                <div class="modal-category">${escapeHTML(CATEGORY_LABELS[p.category] || p.category || 'Produto')}</div>
+                <h3>${escapeHTML(p.name)}</h3>
+                <p class="modal-desc">${escapeHTML(p.desc)}</p>
                 <div class="modal-price">
-                    ${p.price ? `R$ ${p.price.toFixed(2).replace('.',',')}` : 'Consultar preço'}
+                    ${moneyBRL(p.price)}
                     <small>Frete calculado no pedido • personalização disponível</small>
                 </div>
                 <div class="modal-colors">
                     <p class="modal-colors-lbl">Cores disponíveis</p>
                     <div class="modal-colors-list">
-                        ${(p.colors || []).map(c => `<span class="mcolor">${c}</span>`).join('')}
+                        ${(p.colors || []).length
+                            ? (p.colors || []).map((c, i) => `<button type="button" class="mcolor${i === 0 ? ' active' : ''}" data-color="${escapeHTML(c)}">${escapeHTML(c)}</button>`).join('')
+                            : '<span class="modal-muted">Cor a combinar</span>'}
                     </div>
                 </div>
                 ${productSpecsHTML(p)}
                 ${shippingBoxHTML(p)}
+                <div class="modal-purchase">
+                    <div>
+                        <p class="modal-section-title">Pedido</p>
+                        <p class="modal-selected" id="modalSelectedSummary"></p>
+                    </div>
+                    <div class="qty-control" aria-label="Quantidade">
+                        <button type="button" id="qtyMinus" aria-label="Diminuir quantidade">-</button>
+                        <span id="qtyValue">1</span>
+                        <button type="button" id="qtyPlus" aria-label="Aumentar quantidade">+</button>
+                    </div>
+                </div>
                 <div class="modal-btns">
-                    <a href="/orcamento/" class="btn btn-primary" id="modalOrder">Solicitar Orçamento</a>
-                    <button class="btn btn-outline" id="modalCloseBtn">Fechar</button>
+                    <button type="button" class="btn btn-primary" id="modalAddCart">Adicionar ao carrinho</button>
+                    <button type="button" class="btn btn-outline" id="modalBuyNow">Finalizar pedido</button>
                 </div>
             </div>
         </div>
@@ -630,17 +916,68 @@ function openModal(id) {
     modal.classList.add('open');
     document.body.classList.add('no-scroll');
 
-    document.getElementById('modalOrder').addEventListener('click', closeModal);
-    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-    setupShippingCalculator(p);
+    const updateSelectedSummary = () => {
+        const summary = document.getElementById('modalSelectedSummary');
+        if (!summary) return;
+        const parts = [
+            selectedColor ? `Cor: ${selectedColor}` : 'Cor: a combinar',
+            `Qtd: ${selectedQty}`,
+            selectedShipping ? `Frete: ${selectedShipping.name} (${selectedShipping.price})` : 'Frete: a calcular',
+        ];
+        summary.textContent = parts.join(' • ');
+    };
 
-    let activeImageIndex = 0;
+    document.querySelectorAll('.mcolor').forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedColor = btn.dataset.color || '';
+            document.querySelectorAll('.mcolor').forEach(el => el.classList.toggle('active', el === btn));
+            updateSelectedSummary();
+        });
+    });
+
+    const qtyValue = document.getElementById('qtyValue');
+    const setQty = next => {
+        selectedQty = Math.max(1, Math.min(99, Number(next) || 1));
+        if (qtyValue) qtyValue.textContent = selectedQty;
+        updateSelectedSummary();
+    };
+
+    document.getElementById('qtyMinus')?.addEventListener('click', () => setQty(selectedQty - 1));
+    document.getElementById('qtyPlus')?.addEventListener('click', () => setQty(selectedQty + 1));
+
+    const cartPayload = () => ({
+        productId: p.id,
+        name: p.name,
+        category: p.category,
+        price: Number(p.price || 0) || null,
+        image: allImages[0] || p.image || null,
+        emoji: p.emoji || '📦',
+        color: selectedColor || null,
+        qty: selectedQty,
+        cep: selectedShipping?.cep || null,
+        shipping: selectedShipping,
+    });
+
+    document.getElementById('modalAddCart')?.addEventListener('click', () => {
+        addToCart(cartPayload());
+    });
+    document.getElementById('modalBuyNow')?.addEventListener('click', () => {
+        addToCart(cartPayload(), { open: false });
+        openCartDrawer();
+    });
+
+    setupShippingCalculator(p, option => {
+        selectedShipping = option;
+        updateSelectedSummary();
+    });
+    updateSelectedSummary();
+
     const mainImg = document.getElementById('mgMain');
     const counter = document.getElementById('mgCounter');
     const setGalleryImage = index => {
         if (!mainImg || !allImages.length) return;
         activeImageIndex = (index + allImages.length) % allImages.length;
-        mainImg.src = CLOUDINARY.url(allImages[activeImageIndex], {width:800,height:500});
+        mainImg.src = productMainImageUrl(allImages[activeImageIndex]);
         document.querySelectorAll('.mg-thumb').forEach(t => {
             t.classList.toggle('active', Number(t.dataset.i) === activeImageIndex);
         });
@@ -972,7 +1309,14 @@ window.configurarSite = function(config = {}) {
         instagram, shopee, mercadolivre,
         whatsapp, email, nome
     } = config;
-    const whatsappMessage = 'Olá, vim pelo site e gostaria de solicitar um orçamento';
+    SITE_SETTINGS = {
+        ...SITE_SETTINGS,
+        ...Object.fromEntries(
+            Object.entries({ instagram, shopee, mercadolivre, whatsapp, email })
+                .filter(([, value]) => value !== undefined && value !== null)
+        ),
+    };
+    const whatsappMessage = DEFAULT_WHATSAPP_MESSAGE;
 
     const clean = value => typeof value === 'string' ? value.trim() : '';
     const normalizeInstagram = value => {
