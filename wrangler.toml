@@ -1,6 +1,7 @@
 name = "forgecon-auth"
 main = "worker/index.js"
 compatibility_date = "2025-05-01"
+routes = [{ pattern = "api.forgecon.com.br", custom_domain = true }]
 
 [vars]
 ORIGIN_CEP = "03810110"
