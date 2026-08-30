@@ -453,7 +453,7 @@ function productPreview(p) {
     return `
         <div class="product-preview ${pvClass(p.category)}">
             ${p.badge ? `<div class="product-badge">${p.badge}</div>` : ''}
-            <div class="product-preview-emoji">${p.emoji}</div>
+            <div class="product-preview-emoji">${escapeHTML(p.emoji || '📦')}</div>
         </div>`;
 }
 
