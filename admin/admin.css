@@ -759,6 +759,20 @@ select option { background: var(--bg3); }
 }
 .result-total span { font-size: .875rem; font-weight: 700; color: var(--text); }
 .result-total strong { font-size: 1.35rem; font-weight: 800; color: var(--purple-l); }
+.batch-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: -12px 0 22px;
+}
+.batch-summary div {
+    padding: 10px;
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+    background: rgba(255,255,255,.025);
+}
+.batch-summary span { display: block; color: var(--text3); font-size: .65rem; margin-bottom: 3px; }
+.batch-summary strong { color: var(--text); font-size: .78rem; }
 
 .markup-title {
     font-size: .7rem; font-weight: 700; text-transform: uppercase;
@@ -774,6 +788,7 @@ select option { background: var(--bg3); }
 }
 .markup-item span  { font-size: .7rem; color: var(--text2); }
 .markup-item strong { font-size: .9rem; font-weight: 700; color: var(--text); }
+.markup-item small { color: var(--cyan); font-size: .68rem; font-weight: 700; }
 .markup-highlight {
     background: rgba(124,58,237,.08);
     border-color: rgba(124,58,237,.2);
@@ -1086,6 +1101,7 @@ select option { background: var(--bg3); }
     .modal-box { max-height: 100vh; border-radius: 0; }
     .form-row-2,
     .form-row-3 { grid-template-columns: 1fr; }
+    .batch-summary { grid-template-columns: 1fr; }
     .editor-section { padding: 15px; }
     .editor-section-head { align-items: flex-start; flex-direction: column; }
     .product-gallery-editor { grid-template-columns: repeat(2, 1fr); }

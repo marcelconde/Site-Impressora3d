@@ -1164,12 +1164,12 @@ document.getElementById('inviteBtn').addEventListener('click', async () => {
 
 /* ── CALCULATOR ─────────────────────────────────────────── */
 const MATERIALS = {
-    pla:    { price: 90,  unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso do filamento usado na impressão' },
-    petg:   { price: 100, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso do filamento usado na impressão' },
-    abs:    { price: 90,  unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso do filamento usado na impressão' },
-    tpu:    { price: 130, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso do filamento flexível usado na impressão' },
-    asa:    { price: 110, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso do filamento usado na impressão' },
-    resina: { price: 150, unit: 'mL', unitLbl: 'litro', div: 1000, hint: 'Volume de resina consumido na impressão' },
+    pla:    { price: 90,  unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso total usado para produzir todos os itens.' },
+    petg:   { price: 100, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso total usado para produzir todos os itens.' },
+    abs:    { price: 90,  unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso total usado para produzir todos os itens.' },
+    tpu:    { price: 130, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso total usado para produzir todos os itens.' },
+    asa:    { price: 110, unit: 'g',  unitLbl: 'kg',    div: 1000, hint: 'Peso total usado para produzir todos os itens.' },
+    resina: { price: 150, unit: 'mL', unitLbl: 'litro', div: 1000, hint: 'Volume total usado para produzir todos os itens.' },
 };
 
 document.getElementById('cMaterial').addEventListener('change', function () {
@@ -1177,7 +1177,7 @@ document.getElementById('cMaterial').addEventListener('change', function () {
     if (!mat) return;
     document.getElementById('cPriceKg').value        = mat.price;
     document.getElementById('cPriceLbl').textContent = `Preço por ${mat.unitLbl}`;
-    document.getElementById('cQtyLbl').textContent   = `Quantidade usada (${mat.unit})`;
+    document.getElementById('cQtyLbl').textContent   = `${mat.unit === 'g' ? 'Peso' : 'Volume'} total do lote (${mat.unit})`;
     document.getElementById('cQtySuf').textContent   = mat.unit;
     document.getElementById('cQtyHint').textContent  = mat.hint;
     calcUpdate();
@@ -1201,7 +1201,7 @@ function sliderFill(el) {
 }
 
 [
-    'cPriceKg', 'cQty', 'cHours', 'cMins', 'cWatts', 'cKwh',
+    'cPriceKg', 'cBatchQty', 'cQty', 'cHours', 'cMins', 'cWatts', 'cKwh',
     'cMaintenance', 'cModelHours', 'cHourlyRate', 'cAccessory',
     'cPackaging', 'cShipping',
 ].forEach(id =>
@@ -1218,6 +1218,7 @@ function calcUpdate() {
     const mat      = MATERIALS[document.getElementById('cMaterial').value] || MATERIALS.pla;
     const priceKg  = parseFloat(document.getElementById('cPriceKg').value) || 0;
     const qty      = parseFloat(document.getElementById('cQty').value)     || 0;
+    const itemCount = Math.max(1, parseInt(document.getElementById('cBatchQty').value, 10) || 1);
     const hours    = parseFloat(document.getElementById('cHours').value)   || 0;
     const mins     = parseFloat(document.getElementById('cMins').value)    || 0;
     const watts    = parseFloat(document.getElementById('cWatts').value)   || 0;
@@ -1226,7 +1227,8 @@ function calcUpdate() {
     const maintenancePct = parseFloat(document.getElementById('cMaintenance').value) || 0;
     const modelHours = parseFloat(document.getElementById('cModelHours').value) || 0;
     const hourlyRate = parseFloat(document.getElementById('cHourlyRate').value) || 0;
-    const accessoryCost = parseFloat(document.getElementById('cAccessory').value) || 0;
+    const accessoryUnitCost = parseFloat(document.getElementById('cAccessory').value) || 0;
+    const accessoryCost = accessoryUnitCost * itemCount;
     const packagingCost = parseFloat(document.getElementById('cPackaging').value) || 0;
     const shippingCost = parseFloat(document.getElementById('cShipping').value) || 0;
 
@@ -1238,6 +1240,8 @@ function calcUpdate() {
     const maintenanceCost = subtotal * (maintenancePct / 100);
     const modelingCost = modelHours * hourlyRate;
     const total = subtotal + errCost + maintenanceCost + modelingCost + accessoryCost + packagingCost + shippingCost;
+    const unitWeight = qty / itemCount;
+    const unitCost = total / itemCount;
 
     document.getElementById('rMaterial').textContent  = brl(matCost);
     document.getElementById('rEnergy').textContent    = brl(engCost);
@@ -1247,15 +1251,23 @@ function calcUpdate() {
     document.getElementById('rMaintenanceLbl').textContent = `+ Manutenção / desgaste (${maintenancePct}%)`;
     document.getElementById('rMaintenance').textContent = brl(maintenanceCost);
     document.getElementById('rModeling').textContent = brl(modelingCost);
+    document.getElementById('rAccessoryLbl').textContent = `Acessórios (${itemCount} × ${brl(accessoryUnitCost)})`;
     document.getElementById('rAccessory').textContent = brl(accessoryCost);
     document.getElementById('rPackaging').textContent = brl(packagingCost);
     document.getElementById('rShipping').textContent = brl(shippingCost);
     document.getElementById('rTotal').textContent     = brl(total);
+    document.getElementById('rBatchQty').textContent = `${itemCount} un.`;
+    document.getElementById('rUnitWeight').textContent = `${unitWeight.toFixed(2).replace('.', ',')} ${mat.unit}`;
+    document.getElementById('rUnitCost').textContent = brl(unitCost);
 
     document.getElementById('m50').textContent  = brl(total * 1.5);
     document.getElementById('m100').textContent = brl(total * 2);
     document.getElementById('m150').textContent = brl(total * 2.5);
     document.getElementById('m200').textContent = brl(total * 3);
+    document.getElementById('u50').textContent = `${brl((total * 1.5) / itemCount)}/un.`;
+    document.getElementById('u100').textContent = `${brl((total * 2) / itemCount)}/un.`;
+    document.getElementById('u150').textContent = `${brl((total * 2.5) / itemCount)}/un.`;
+    document.getElementById('u200').textContent = `${brl((total * 3) / itemCount)}/un.`;
     updateQuoteTotal();
 
     clearTimeout(calcAuditTimer);
@@ -1263,6 +1275,7 @@ function calcUpdate() {
         if(qty > 0 || hours > 0 || mins > 0) {
             recordAdminAudit('usou_calculadora', 'calculadora', null, {
                 material: document.getElementById('cMaterial').value,
+                itens: itemCount,
                 peso: qty + 'g',
                 tempo: hours + 'h ' + mins + 'm',
                 custo_total: brl(total)
@@ -1311,6 +1324,7 @@ function calcSnapshot() {
     const mat      = MATERIALS[materialKey] || MATERIALS.pla;
     const priceKg  = parseFloat(document.getElementById('cPriceKg').value) || 0;
     const qty      = parseFloat(document.getElementById('cQty').value)     || 0;
+    const itemCount = Math.max(1, parseInt(document.getElementById('cBatchQty').value, 10) || 1);
     const hours    = parseFloat(document.getElementById('cHours').value)   || 0;
     const mins     = parseFloat(document.getElementById('cMins').value)    || 0;
     const watts    = parseFloat(document.getElementById('cWatts').value)   || 0;
@@ -1319,7 +1333,8 @@ function calcSnapshot() {
     const maintenancePct = parseFloat(document.getElementById('cMaintenance').value) || 0;
     const modelHours = parseFloat(document.getElementById('cModelHours').value) || 0;
     const hourlyRate = parseFloat(document.getElementById('cHourlyRate').value) || 0;
-    const accessoryCost = parseFloat(document.getElementById('cAccessory').value) || 0;
+    const accessoryUnitCost = parseFloat(document.getElementById('cAccessory').value) || 0;
+    const accessoryCost = accessoryUnitCost * itemCount;
     const packagingCost = parseFloat(document.getElementById('cPackaging').value) || 0;
     const shippingCost = parseFloat(document.getElementById('cShipping').value) || 0;
     const matCost  = (qty / mat.div) * priceKg;
@@ -1330,6 +1345,8 @@ function calcSnapshot() {
     const maintenanceCost = subtotal * (maintenancePct / 100);
     const modelingCost = modelHours * hourlyRate;
     const total = subtotal + errCost + maintenanceCost + modelingCost + accessoryCost + packagingCost + shippingCost;
+    const unitWeight = qty / itemCount;
+    const unitCost = total / itemCount;
 
     return {
         materialKey,
@@ -1338,6 +1355,8 @@ function calcSnapshot() {
         unitLabel: mat.unitLbl,
         priceKg,
         qty,
+        itemCount,
+        unitWeight,
         hours,
         mins,
         watts,
@@ -1353,10 +1372,12 @@ function calcSnapshot() {
         modelHours,
         hourlyRate,
         modelingCost,
+        accessoryUnitCost,
         accessoryCost,
         packagingCost,
         shippingCost,
         total,
+        unitCost,
         suggested100: total * 2,
     };
 }
@@ -1489,9 +1510,9 @@ function readQuoteForm() {
     const calculatedItem = calculatedValue > 0 ? [{
         id: 'calculated',
         name: 'Produção 3D e execução do pedido',
-        description: 'Valor calculado para produção e serviços conforme especificações do pedido.',
-        quantity: 1,
-        unitPrice: calculatedValue,
+        description: `${calc.qty.toFixed(2).replace('.', ',')} ${calc.unit} no lote • ${calc.unitWeight.toFixed(2).replace('.', ',')} ${calc.unit} por unidade • ${calc.totalHours.toFixed(2).replace('.', ',')} h de impressão.`,
+        quantity: calc.itemCount,
+        unitPrice: calculatedValue / calc.itemCount,
         calculated: true,
     }] : [];
     const items = [...calculatedItem, ...extraItems];

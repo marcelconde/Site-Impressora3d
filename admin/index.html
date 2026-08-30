@@ -285,13 +285,23 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="cQty" id="cQtyLbl">Quantidade usada (g)</label>
-                                <div class="calc-affix">
-                                    <input type="number" id="cQty" min="0" step="1" placeholder="0">
-                                    <span class="affix-suf" id="cQtySuf">g</span>
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="cBatchQty">Quantidade de itens do lote</label>
+                                    <div class="calc-affix">
+                                        <input type="number" id="cBatchQty" min="1" step="1" value="1">
+                                        <span class="affix-suf">un.</span>
+                                    </div>
+                                    <span class="field-hint">Ex: 20 chaveiros produzidos juntos.</span>
                                 </div>
-                                <span class="field-hint" id="cQtyHint">Peso do filamento que será usado na impressão</span>
+                                <div class="form-group">
+                                    <label for="cQty" id="cQtyLbl">Peso total do lote (g)</label>
+                                    <div class="calc-affix">
+                                        <input type="number" id="cQty" min="0" step="0.1" placeholder="0">
+                                        <span class="affix-suf" id="cQtySuf">g</span>
+                                    </div>
+                                    <span class="field-hint" id="cQtyHint">Peso total usado para produzir todos os itens.</span>
+                                </div>
                             </div>
                         </div>
 
@@ -364,17 +374,17 @@
                                     <span class="field-hint">Entra no custo, mas não aparece na OS.</span>
                                 </div>
                                 <div class="form-group">
-                                    <label for="cAccessory">Acessórios</label>
+                                    <label for="cAccessory">Acessório por unidade</label>
                                     <div class="calc-affix">
                                         <span class="affix-pre">R$</span>
                                         <input type="number" id="cAccessory" min="0" step="0.01" placeholder="0,00">
                                     </div>
-                                    <span class="field-hint">Clicker, argola, ímã, parafuso etc.</span>
+                                    <span class="field-hint">Multiplicado pela quantidade do lote. Ex: R$ 0,70 × 20.</span>
                                 </div>
                             </div>
                             <div class="form-row-2">
                                 <div class="form-group">
-                                    <label for="cPackaging">Embalagem</label>
+                                    <label for="cPackaging">Embalagem do pedido</label>
                                     <div class="calc-affix">
                                         <span class="affix-pre">R$</span>
                                         <input type="number" id="cPackaging" min="0" step="0.01" placeholder="0,00">
@@ -549,7 +559,7 @@
                                     <strong id="rModeling">R$ 0,00</strong>
                                 </div>
                                 <div class="result-line">
-                                    <span>Acessórios</span>
+                                    <span id="rAccessoryLbl">Acessórios</span>
                                     <strong id="rAccessory">R$ 0,00</strong>
                                 </div>
                                 <div class="result-line">
@@ -563,28 +573,38 @@
                             </div>
 
                             <div class="result-total">
-                                <span>Custo total</span>
+                                <span>Custo total do lote</span>
                                 <strong id="rTotal">R$ 0,00</strong>
+                            </div>
+
+                            <div class="batch-summary">
+                                <div><span>Itens no lote</span><strong id="rBatchQty">1 un.</strong></div>
+                                <div><span>Peso por unidade</span><strong id="rUnitWeight">0 g</strong></div>
+                                <div><span>Custo por unidade</span><strong id="rUnitCost">R$ 0,00</strong></div>
                             </div>
 
                             <div class="result-markup">
                                 <p class="markup-title">Sugestão de preço de venda</p>
                                 <div class="markup-grid">
                                     <div class="markup-item">
-                                        <span>Lucro 50%</span>
+                                        <span>Lucro 50% • lote</span>
                                         <strong id="m50">R$ 0,00</strong>
+                                        <small id="u50">R$ 0,00/un.</small>
                                     </div>
                                     <div class="markup-item">
-                                        <span>Lucro 100%</span>
+                                        <span>Lucro 100% • lote</span>
                                         <strong id="m100">R$ 0,00</strong>
+                                        <small id="u100">R$ 0,00/un.</small>
                                     </div>
                                     <div class="markup-item">
-                                        <span>Lucro 150%</span>
+                                        <span>Lucro 150% • lote</span>
                                         <strong id="m150">R$ 0,00</strong>
+                                        <small id="u150">R$ 0,00/un.</small>
                                     </div>
                                     <div class="markup-item markup-highlight">
-                                        <span>Lucro 200%</span>
+                                        <span>Lucro 200% • lote</span>
                                         <strong id="m200">R$ 0,00</strong>
+                                        <small id="u200">R$ 0,00/un.</small>
                                     </div>
                                 </div>
                             </div>
