@@ -829,6 +829,58 @@ select option { background: var(--bg3); }
     color: var(--text);
     background: linear-gradient(135deg, rgba(124,58,237,.35), rgba(14,165,233,.22));
 }
+.quote-calculation-box {
+    margin: 8px 0 16px;
+    padding: 18px;
+    border: 1px solid rgba(14,165,233,.3);
+    border-radius: var(--r);
+    background: linear-gradient(135deg, rgba(14,165,233,.1), rgba(124,58,237,.08));
+}
+.quote-calculation-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.quote-calculation-head strong { display: block; font-size: .9rem; }
+.quote-calculation-head > div > span { display: block; margin-top: 3px; color: var(--text2); font-size: .75rem; }
+.quote-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.quote-switch input { width: 17px; height: 17px; accent-color: var(--purple); }
+.quote-calculation-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: end;
+}
+.quote-calculation-row .form-group { margin-bottom: 0; }
+.quote-calculated-value {
+    min-width: 150px;
+    min-height: 42px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+}
+.quote-calculated-value span { color: var(--text2); font-size: .68rem; }
+.quote-calculated-value strong { margin-top: 2px; color: var(--cyan); font-size: 1.15rem; }
+.quote-calculation-warning {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(14,165,233,.16);
+    color: #fbbf24;
+    font-size: .73rem;
+    line-height: 1.5;
+}
 .quote-product-box {
     margin-bottom: 16px;
     padding: 16px;
@@ -854,6 +906,14 @@ select option { background: var(--bg3); }
 .quote-items-header strong { display: block; font-size: .9rem; }
 .quote-items-header span { display: block; margin-top: 3px; font-size: .75rem; color: var(--text2); }
 .quote-items { display: flex; flex-direction: column; gap: 12px; }
+.quote-items-empty {
+    padding: 18px;
+    border: 1px dashed var(--border2);
+    border-radius: var(--r);
+    color: var(--text2);
+    font-size: .78rem;
+    text-align: center;
+}
 .quote-item {
     padding: 16px;
     border: 1px solid var(--border2);
@@ -906,8 +966,12 @@ select option { background: var(--bg3); }
     border-radius: var(--r);
     background: rgba(124,58,237,.1);
 }
-.quote-grand-total span { font-size: .82rem; font-weight: 700; }
-.quote-grand-total strong { color: var(--purple-l); font-size: 1.2rem; }
+.quote-total-breakdown { display: flex; flex-direction: column; gap: 5px; }
+.quote-total-breakdown span { color: var(--text2); font-size: .72rem; }
+.quote-total-breakdown strong { color: var(--text); font-size: .78rem; }
+.quote-total-final { display: flex; align-items: center; gap: 20px; }
+.quote-total-final span { font-size: .82rem; font-weight: 700; }
+.quote-total-final strong { color: var(--purple-l); font-size: 1.2rem; }
 .quote-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1027,6 +1091,7 @@ select option { background: var(--bg3); }
     .quote-actions .btn { flex: 1 1 180px; }
     .quote-item-values { grid-template-columns: 90px 1fr; }
     .quote-item-subtotal { grid-column: 1 / -1; align-items: flex-start; }
+    .quote-grand-total { align-items: flex-end; }
     .settings-grid { grid-template-columns: 1fr; }
     .settings-card-head,
     .settings-actions { flex-direction: column; align-items: stretch; }
@@ -1043,6 +1108,12 @@ select option { background: var(--bg3); }
     .quote-mode { width: 100%; }
     .quote-mode-btn { flex: 1; }
     .quote-product-add { grid-template-columns: 1fr; }
+    .quote-calculation-head,
+    .quote-calculation-row,
+    .quote-grand-total { align-items: stretch; flex-direction: column; }
+    .quote-calculation-row { display: flex; }
+    .quote-calculated-value { align-items: flex-start; }
+    .quote-total-final { justify-content: space-between; }
     .quote-items-header { align-items: flex-start; flex-direction: column; }
     .quote-item-values { grid-template-columns: 1fr; }
     .quote-item-subtotal { grid-column: auto; }

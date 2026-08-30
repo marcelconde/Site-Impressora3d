@@ -1300,6 +1300,7 @@ function calcUpdate() {
     document.getElementById('m100').textContent = brl(total * 2);
     document.getElementById('m150').textContent = brl(total * 2.5);
     document.getElementById('m200').textContent = brl(total * 3);
+    updateQuoteTotal();
 
     clearTimeout(calcAuditTimer);
     calcAuditTimer = setTimeout(() => {
@@ -1324,11 +1325,14 @@ const quoteEls = {
     payment: document.getElementById('qPayment'),
     notes: document.getElementById('qNotes'),
     items: document.getElementById('quoteItems'),
+    includeCalculated: document.getElementById('qIncludeCalculated'),
+    pricingMode: document.getElementById('qPricingMode'),
+    calculatedValue: document.getElementById('qCalculatedValue'),
+    calcSubtotal: document.getElementById('qCalcSubtotal'),
+    itemsSubtotal: document.getElementById('qItemsSubtotal'),
     grandTotal: document.getElementById('qGrandTotal'),
     addItem: document.getElementById('quoteAddItemBtn'),
     addProduct: document.getElementById('quoteAddProductBtn'),
-    useCost: document.getElementById('quoteUseCostBtn'),
-    useSuggested: document.getElementById('quoteUseSuggestedBtn'),
     pdf: document.getElementById('quotePdfBtn'),
 };
 
@@ -1401,6 +1405,18 @@ function calcSnapshot() {
     };
 }
 
+function quoteCalculatedPrice(calc = calcSnapshot()) {
+    const multipliers = {
+        cost: 1,
+        profit50: 1.5,
+        profit100: 2,
+        profit150: 2.5,
+        profit200: 3,
+    };
+    const multiplier = multipliers[quoteEls.pricingMode?.value] || 1;
+    return quoteEls.includeCalculated?.checked ? calc.total * multiplier : 0;
+}
+
 function updateQuoteProductOptions() {
     if (!quoteEls.product) return;
     const current = quoteEls.product.value;
@@ -1449,7 +1465,7 @@ function applyProductToQuote(id) {
         name: product.name || 'Produto',
         description,
         quantity: 1,
-        unitPrice: product.price != null ? Number(product.price) : 0,
+        unitPrice: quoteEls.includeCalculated?.checked ? 0 : (product.price != null ? Number(product.price) : 0),
     };
     const first = quoteItems[0];
     if (quoteItems.length === 1 && first && !first.name && !first.description && !first.unitPrice) {
@@ -1459,10 +1475,13 @@ function applyProductToQuote(id) {
         addQuoteItem(newItem);
     }
     quoteEls.product.value = '';
+    if (quoteEls.includeCalculated?.checked) {
+        showToast('Produto adicionado sem preço extra; valor da calculadora já está na OS.', 'info');
+    }
 }
 
 function renderQuoteItems() {
-    quoteEls.items.innerHTML = quoteItems.map((item, index) => `
+    quoteEls.items.innerHTML = quoteItems.length ? quoteItems.map((item, index) => `
         <div class="quote-item" data-item-id="${item.id}">
             <div class="quote-item-top">
                 <span class="quote-item-number">Item ${index + 1}</span>
@@ -1487,19 +1506,18 @@ function renderQuoteItems() {
                 </div>
                 <div class="quote-item-subtotal"><span>Subtotal</span><strong>${brl(item.quantity * item.unitPrice)}</strong></div>
             </div>
-        </div>`).join('');
+        </div>`).join('') : '<div class="quote-items-empty">Nenhum item adicional. O valor da calculadora já será incluído na OS.</div>';
     updateQuoteTotal();
 }
 
 function updateQuoteTotal() {
-    const total = quoteItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    quoteEls.grandTotal.textContent = brl(total);
-}
-
-function setQuoteItemPrice(value) {
-    if (!quoteItems.length) addQuoteItem();
-    quoteItems[0].unitPrice = Math.max(0, Number(value) || 0);
-    renderQuoteItems();
+    if (!quoteEls.grandTotal) return;
+    const itemsTotal = quoteItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const calculatedTotal = quoteCalculatedPrice();
+    quoteEls.calculatedValue.textContent = brl(calculatedTotal);
+    quoteEls.calcSubtotal.textContent = brl(calculatedTotal);
+    quoteEls.itemsSubtotal.textContent = brl(itemsTotal);
+    quoteEls.grandTotal.textContent = brl(calculatedTotal + itemsTotal);
 }
 
 function readQuoteForm() {
@@ -1508,9 +1526,19 @@ function readQuoteForm() {
     const now = new Date();
     const validUntil = new Date(now);
     validUntil.setDate(validUntil.getDate() + days);
-    const items = quoteItems
+    const extraItems = quoteItems
         .map(item => ({ ...item, name: item.name.trim(), description: item.description.trim() }))
         .filter(item => item.name || item.description || item.unitPrice > 0);
+    const calculatedValue = quoteCalculatedPrice(calc);
+    const calculatedItem = calculatedValue > 0 ? [{
+        id: 'calculated',
+        name: 'Produção 3D e execução do pedido',
+        description: 'Valor calculado para produção e serviços conforme especificações do pedido.',
+        quantity: 1,
+        unitPrice: calculatedValue,
+        calculated: true,
+    }] : [];
+    const items = [...calculatedItem, ...extraItems];
     const salePrice = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
     return {
@@ -1520,6 +1548,7 @@ function readQuoteForm() {
         client: quoteEls.client.value.trim() || 'Cliente não informado',
         phone: quoteEls.phone.value.trim(),
         items,
+        calculatedValue,
         salePrice,
         payment: quoteEls.payment.value.trim() || 'A combinar',
         notes: quoteEls.notes.value.trim(),
@@ -1773,8 +1802,7 @@ quoteEls.items?.addEventListener('click', event => {
     const id = Number(event.target.dataset.removeItem);
     if (!id) return;
     quoteItems = quoteItems.filter(item => item.id !== id);
-    if (!quoteItems.length) addQuoteItem();
-    else renderQuoteItems();
+    renderQuoteItems();
 });
 quoteEls.addItem?.addEventListener('click', () => addQuoteItem());
 quoteEls.addProduct?.addEventListener('click', () => {
@@ -1784,17 +1812,11 @@ quoteEls.addProduct?.addEventListener('click', () => {
     }
     applyProductToQuote(quoteEls.product.value);
 });
-quoteEls.useCost?.addEventListener('click', () => {
-    setQuoteItemPrice(calcSnapshot().total);
-    showToast('Custo total aplicado ao primeiro item.', 'info');
-});
-quoteEls.useSuggested?.addEventListener('click', () => {
-    setQuoteItemPrice(calcSnapshot().suggested100);
-    showToast('Sugestão com lucro 100% aplicada ao primeiro item.', 'info');
-});
+quoteEls.includeCalculated?.addEventListener('change', updateQuoteTotal);
+quoteEls.pricingMode?.addEventListener('change', updateQuoteTotal);
 quoteEls.pdf?.addEventListener('click', generateQuotePdf);
 updateQuoteProductOptions();
-addQuoteItem();
+renderQuoteItems();
 
 /* ── ESC to close ───────────────────────────────────────── */
 document.addEventListener('keydown', e => {

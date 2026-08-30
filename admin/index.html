@@ -443,6 +443,36 @@
                                 </div>
                             </div>
 
+                            <div class="quote-calculation-box">
+                                <div class="quote-calculation-head">
+                                    <div>
+                                        <strong>Valor vindo da calculadora</strong>
+                                        <span>Atualiza automaticamente conforme os custos acima.</span>
+                                    </div>
+                                    <label class="quote-switch">
+                                        <input type="checkbox" id="qIncludeCalculated" checked>
+                                        <span>Incluir na OS</span>
+                                    </label>
+                                </div>
+                                <div class="quote-calculation-row">
+                                    <div class="form-group">
+                                        <label for="qPricingMode">Preço aplicado</label>
+                                        <select id="qPricingMode">
+                                            <option value="cost">Custo total — sem lucro</option>
+                                            <option value="profit50">Venda com lucro de 50%</option>
+                                            <option value="profit100">Venda com lucro de 100%</option>
+                                            <option value="profit150">Venda com lucro de 150%</option>
+                                            <option value="profit200">Venda com lucro de 200%</option>
+                                        </select>
+                                    </div>
+                                    <div class="quote-calculated-value">
+                                        <span>Valor calculado</span>
+                                        <strong id="qCalculatedValue">R$ 0,00</strong>
+                                    </div>
+                                </div>
+                                <p class="quote-calculation-warning">Material, energia, falhas, manutenção, modelagem, acessórios, embalagem e envio já entram neste valor. Não repita esses custos como itens adicionais.</p>
+                            </div>
+
                             <div class="quote-product-box" id="quoteProductBox">
                                 <div class="quote-product-add">
                                     <div class="form-group">
@@ -457,16 +487,19 @@
 
                             <div class="quote-items-header">
                                 <div>
-                                    <strong>Itens do cliente</strong>
-                                    <span>Inclua quantos produtos ou serviços precisar.</span>
+                                    <strong>Itens adicionais</strong>
+                                    <span>Use somente para produtos ou serviços não incluídos na calculadora.</span>
                                 </div>
                                 <button type="button" class="btn btn-outline btn-sm" id="quoteAddItemBtn">+ Item manual</button>
                             </div>
                             <div class="quote-items" id="quoteItems"></div>
 
                             <div class="quote-grand-total">
-                                <span>Total da OS</span>
-                                <strong id="qGrandTotal">R$ 0,00</strong>
+                                <div class="quote-total-breakdown">
+                                    <span>Calculadora: <strong id="qCalcSubtotal">R$ 0,00</strong></span>
+                                    <span>Adicionais: <strong id="qItemsSubtotal">R$ 0,00</strong></span>
+                                </div>
+                                <div class="quote-total-final"><span>Total da OS</span><strong id="qGrandTotal">R$ 0,00</strong></div>
                             </div>
 
                             <div class="form-group">
@@ -475,8 +508,6 @@
                             </div>
 
                             <div class="quote-actions">
-                                <button type="button" class="btn btn-outline" id="quoteUseCostBtn">Usar custo total</button>
-                                <button type="button" class="btn btn-outline" id="quoteUseSuggestedBtn">Usar lucro 100%</button>
                                 <button type="button" class="btn btn-primary" id="quotePdfBtn">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
                                     Gerar OS em PDF
