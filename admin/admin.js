@@ -524,7 +524,11 @@ function openModal(id) {
         document.getElementById('fName').value = p.name || '';
         document.getElementById('fCategory').value = p.category || '';
         document.getElementById('fPrice').value = p.price ?? '';
+        document.getElementById('fShortDesc').value = p.shortDesc || '';
         document.getElementById('fDesc').value = p.desc || '';
+        document.getElementById('fFeatures').value = Array.isArray(p.features) ? p.features.join('\n') : '';
+        document.getElementById('fCustomization').value = p.customization || '';
+        document.getElementById('fProductionTime').value = p.productionTime || '';
         document.getElementById('fWeight').value = p.weight ?? '';
         document.getElementById('fMaterial').value = p.material || '';
         document.getElementById('fLength').value = p.dimensions?.length ?? '';
@@ -533,7 +537,6 @@ function openModal(id) {
         document.getElementById('fEmoji').value = p.emoji || '';
         document.getElementById('fBadge').value = p.badge || '';
         document.getElementById('imagePublicId').value = p.image || '';
-        if (p.image) showImagePreview(CLD_URL(p.image));
         currentColors = Array.isArray(p.colors) ? [...p.colors] : [];
         extraImages = Array.isArray(p.images) ? p.images.filter(i => i !== p.image) : [];
     } else {
@@ -562,8 +565,6 @@ function resetForm() {
     productForm.reset();
     document.getElementById('editId').value = '';
     document.getElementById('imagePublicId').value = '';
-    document.getElementById('uploadPreview').classList.add('hidden');
-    document.getElementById('uploadPh').classList.remove('hidden');
     document.getElementById('uploadProgressWrap').classList.add('hidden');
     document.getElementById('uploadProgressBar').style.width = '0';
     currentColors = [];
@@ -589,24 +590,24 @@ function renderColorTags() {
 
 function renderExtraImages() {
     const list = document.getElementById('extraImagesList');
-    list.innerHTML = extraImages.map((img, i) => `
-        <div class="extra-img-row gallery-img-row">
-            <div class="gallery-img-thumb">
-                ${img ? `<img src="${CLD_URL(img, 96, 96)}" alt="Foto ${i + 1}" loading="lazy">` : '<span>+</span>'}
+    const cover = document.getElementById('imagePublicId').value.trim();
+    const images = [cover, ...extraImages].filter(Boolean);
+    list.innerHTML = images.map((img, i) => `
+        <div class="gallery-editor-card${i === 0 ? ' is-cover' : ''}">
+            <img src="${CLD_URL(img, 360, 270)}" alt="Foto ${i + 1}" loading="lazy">
+            ${i === 0 ? '<span class="gallery-cover-badge">CAPA</span>' : ''}
+            <span class="gallery-order">${i + 1}</span>
+            <div class="gallery-editor-actions">
+                ${i ? `<button type="button" class="btn btn-outline gallery-set-cover" data-i="${i - 1}">Definir capa</button>` : '<span></span>'}
+                <button type="button" class="btn btn-del gallery-remove" data-i="${i}">Remover</button>
             </div>
-            <input type="text" value="${esc(img)}" placeholder="Ex: Geek/Produto/foto2" class="input-full extra-img-input" data-i="${i}">
-            <button type="button" class="btn btn-outline btn-sm extra-img-cover" data-i="${i}">Capa</button>
-            <button type="button" class="btn btn-del btn-sm extra-img-remove" data-i="${i}">✕</button>
         </div>
     `).join('');
-    list.querySelectorAll('.extra-img-input').forEach(inp =>
-        inp.addEventListener('input', e => { extraImages[+e.target.dataset.i] = e.target.value.trim(); })
+    list.querySelectorAll('.gallery-set-cover').forEach(btn =>
+        btn.addEventListener('click', () => setExtraImageAsCover(Number(btn.dataset.i)))
     );
-    list.querySelectorAll('.extra-img-cover').forEach(btn =>
-        btn.addEventListener('click', e => setExtraImageAsCover(+e.target.dataset.i))
-    );
-    list.querySelectorAll('.extra-img-remove').forEach(btn =>
-        btn.addEventListener('click', e => { extraImages.splice(+e.target.dataset.i, 1); renderExtraImages(); })
+    list.querySelectorAll('.gallery-remove').forEach(btn =>
+        btn.addEventListener('click', () => removeGalleryImage(Number(btn.dataset.i)))
     );
 }
 
@@ -617,39 +618,51 @@ function setExtraImageAsCover(index) {
     extraImages.splice(index, 1);
     if (currentCover) extraImages.unshift(currentCover);
     document.getElementById('imagePublicId').value = nextCover;
-    showImagePreview(CLD_URL(nextCover));
     renderExtraImages();
 }
 
-document.getElementById('addExtraImageBtn').addEventListener('click', () => {
-    extraImages.push('');
+function removeGalleryImage(index) {
+    const coverInput = document.getElementById('imagePublicId');
+    if (index === 0) {
+        coverInput.value = extraImages.shift() || '';
+    } else {
+        extraImages.splice(index - 1, 1);
+    }
     renderExtraImages();
-    const inputs = document.querySelectorAll('.extra-img-input');
-    if (inputs.length) inputs[inputs.length - 1].focus();
-});
+}
 
 const galleryFiles = document.getElementById('galleryFiles');
 const galleryUploadBtn = document.getElementById('galleryUploadBtn');
 
 galleryUploadBtn.addEventListener('click', () => galleryFiles.click());
+galleryUploadBtn.addEventListener('dragover', e => {
+    e.preventDefault();
+    galleryUploadBtn.classList.add('drag-over');
+});
+galleryUploadBtn.addEventListener('dragleave', () => galleryUploadBtn.classList.remove('drag-over'));
+galleryUploadBtn.addEventListener('drop', e => {
+    e.preventDefault();
+    galleryUploadBtn.classList.remove('drag-over');
+    uploadGalleryFiles([...e.dataTransfer.files]);
+});
 galleryFiles.addEventListener('change', () => {
     if (galleryFiles.files.length) uploadGalleryFiles([...galleryFiles.files]);
     galleryFiles.value = '';
 });
 
 document.getElementById('syncCloudinaryBtn').addEventListener('click', async () => {
-    const folder = document.getElementById('imagePublicId').value.trim();
     const hint   = document.getElementById('syncHint');
     const btn    = document.getElementById('syncCloudinaryBtn');
+    const category = document.getElementById('fCategory').value;
+    const name = document.getElementById('fName').value.trim();
 
-    if (!folder) {
-        hint.textContent = 'Preencha a pasta da foto de capa primeiro (ex: Geek/Pikachu/capa).';
+    if (!category || !name) {
+        hint.textContent = 'Preencha nome e categoria para localizar a pasta no Cloudinary.';
         hint.style.color = 'var(--red)';
         return;
     }
 
-    const parts = folder.split('/');
-    const productFolder = parts.length > 1 ? 'Produtos/' + parts.slice(0, -1).join('/') : 'Produtos';
+    const productFolder = `Produtos/${capitalizeFirst(category)}/${sanitizeName(name)}`;
 
     btn.disabled = true;
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg> Buscando...`;
@@ -671,37 +684,11 @@ document.getElementById('syncCloudinaryBtn').addEventListener('click', async () 
             return;
         }
 
-        extraImages = [];
-        const list = document.getElementById('extraImagesList');
-        list.innerHTML = `<p style="font-size:.8rem;color:var(--text2);margin:6px 0">Clique nas fotos para incluir (a capa já é adicionada automaticamente):</p>
-            <div class="cld-thumb-grid" id="cldThumbGrid"></div>`;
-
-        const coverFull = 'Produtos/' + folder;
-        const grid = document.getElementById('cldThumbGrid');
-
-        data.images.forEach(img => {
-            const isCover = img.public_id === coverFull;
-            const thumb = document.createElement('img');
-            thumb.src = `https://res.cloudinary.com/${CONFIG.cloudName}/image/upload/w_140,h_140,c_fill,q_auto,f_auto/${img.public_id}`;
-            thumb.className = 'cld-thumb' + (isCover ? ' selected' : '');
-            thumb.title = img.public_id;
-
-            if (!isCover) {
-                thumb.addEventListener('click', () => {
-                    const path = img.public_id.replace('Produtos/', '');
-                    if (thumb.classList.contains('selected')) {
-                        thumb.classList.remove('selected');
-                        extraImages = extraImages.filter(e => e !== path);
-                    } else {
-                        thumb.classList.add('selected');
-                        extraImages.push(path);
-                    }
-                });
-            }
-            grid.appendChild(thumb);
-        });
-
-        hint.textContent = `${data.images.length} foto(s) encontrada(s). Selecione as que deseja incluir.`;
+        const paths = data.images.map(img => img.public_id.replace(/^Produtos\//, '')).filter(Boolean);
+        document.getElementById('imagePublicId').value = paths[0] || '';
+        extraImages = paths.slice(1);
+        renderExtraImages();
+        hint.textContent = `${paths.length} foto(s) importada(s) da pasta.`;
         hint.style.color = 'var(--green)';
 
     } catch {
@@ -726,64 +713,9 @@ document.getElementById('colorInput').addEventListener('keydown', e => {
 });
 
 /* ── IMAGE UPLOAD ───────────────────────────────────────── */
-const imageUploadBox  = document.getElementById('imageUploadBox');
-const imageFile       = document.getElementById('imageFile');
-const uploadPh        = document.getElementById('uploadPh');
-const uploadPreview   = document.getElementById('uploadPreview');
 const uploadProgressWrap = document.getElementById('uploadProgressWrap');
 const uploadProgressBar  = document.getElementById('uploadProgressBar');
 const uploadProgressText = document.getElementById('uploadProgressText');
-
-imageUploadBox.addEventListener('click', () => imageFile.click());
-
-imageUploadBox.addEventListener('dragover', e => {
-    e.preventDefault();
-    imageUploadBox.classList.add('drag-over');
-});
-imageUploadBox.addEventListener('dragleave', () => imageUploadBox.classList.remove('drag-over'));
-imageUploadBox.addEventListener('drop', e => {
-    e.preventDefault();
-    imageUploadBox.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) handleFileSelected(file);
-});
-
-imageFile.addEventListener('change', () => {
-    if (imageFile.files[0]) handleFileSelected(imageFile.files[0]);
-});
-
-function showImagePreview(url) {
-    uploadPreview.src = url;
-    uploadPreview.classList.remove('hidden');
-    uploadPh.classList.add('hidden');
-}
-
-async function handleFileSelected(file) {
-    const category = document.getElementById('fCategory').value || 'geral';
-    const name     = document.getElementById('fName').value.trim() || 'produto';
-
-    const folder = `Produtos/${capitalizeFirst(category)}/${sanitizeName(name)}`;
-
-    showImagePreview(URL.createObjectURL(file));
-    uploadProgressWrap.classList.remove('hidden');
-    uploadProgressBar.style.width = '0';
-    uploadProgressText.textContent = 'Enviando para Cloudinary…';
-
-    try {
-        const publicId = await uploadToCloudinary(file, folder);
-        const relative = publicId.replace(/^Produtos\//, '');
-        document.getElementById('imagePublicId').value = relative;
-        uploadProgressBar.style.width = '100%';
-        uploadProgressText.textContent = 'Upload concluído!';
-        setTimeout(() => uploadProgressWrap.classList.add('hidden'), 2000);
-        showToast('Imagem enviada com sucesso!');
-    } catch (err) {
-        uploadProgressText.textContent = 'Erro no upload. Tente novamente.';
-        uploadProgressBar.style.width = '0';
-        console.error(err);
-        showToast('Falha no upload: ' + err.message, 'error');
-    }
-}
 
 async function uploadGalleryFiles(files) {
     const validFiles = files.filter(file => file.type.startsWith('image/'));
@@ -792,33 +724,40 @@ async function uploadGalleryFiles(files) {
         return;
     }
 
-    const category = document.getElementById('fCategory').value || 'geral';
-    const name = document.getElementById('fName').value.trim() || 'produto';
+    const category = document.getElementById('fCategory').value;
+    const name = document.getElementById('fName').value.trim();
+    if (!category || !name) {
+        showToast('Preencha nome e categoria antes de enviar fotos.', 'error');
+        document.getElementById(!name ? 'fName' : 'fCategory').focus();
+        return;
+    }
     const folder = `Produtos/${capitalizeFirst(category)}/${sanitizeName(name)}`;
     const hint = document.getElementById('syncHint');
     const btn = document.getElementById('galleryUploadBtn');
 
     btn.disabled = true;
     hint.style.color = '';
+    uploadProgressWrap.classList.remove('hidden');
+    uploadProgressBar.style.width = '0%';
 
     try {
-        for (let i = 0; i < validFiles.length; i++) {
-            const file = validFiles[i];
-            hint.textContent = `Enviando foto ${i + 1} de ${validFiles.length}...`;
+        let finished = 0;
+        const results = await Promise.all(validFiles.map(async file => {
             const publicId = await uploadToCloudinary(file, folder);
-            const relative = publicId.replace(/^Produtos\//, '');
-            const coverInput = document.getElementById('imagePublicId');
+            finished += 1;
+            const percent = Math.round((finished / validFiles.length) * 100);
+            uploadProgressBar.style.width = `${percent}%`;
+            uploadProgressText.textContent = `Enviando ${finished} de ${validFiles.length} fotos…`;
+            return publicId.replace(/^Produtos\//, '');
+        }));
+        const coverInput = document.getElementById('imagePublicId');
+        const existing = [coverInput.value.trim(), ...extraImages].filter(Boolean);
+        const merged = [...existing, ...results].filter((img, index, arr) => arr.indexOf(img) === index);
+        coverInput.value = merged[0] || '';
+        extraImages = merged.slice(1);
+        renderExtraImages();
 
-            if (!coverInput.value.trim()) {
-                coverInput.value = relative;
-                showImagePreview(CLD_URL(relative));
-            } else if (!extraImages.includes(relative)) {
-                extraImages.push(relative);
-            }
-            renderExtraImages();
-        }
-
-        hint.textContent = `${validFiles.length} foto(s) enviada(s). Use o botão "Capa" para escolher a principal.`;
+        hint.textContent = `${results.length} foto(s) enviadas. Primeira foto usada como capa.`;
         hint.style.color = 'var(--green)';
         showToast('Fotos enviadas com sucesso.');
     } catch (err) {
@@ -827,6 +766,8 @@ async function uploadGalleryFiles(files) {
         showToast('Falha no upload: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
+        uploadProgressText.textContent = 'Upload concluído.';
+        setTimeout(() => uploadProgressWrap.classList.add('hidden'), 1800);
     }
 }
 
@@ -863,6 +804,7 @@ function clearErrors() {
     ['fNameErr','fCategoryErr','fDescErr'].forEach(id => {
         document.getElementById(id).textContent = '';
     });
+    ['fWeight','fLength','fWidth','fHeight'].forEach(id => document.getElementById(id).classList.remove('error'));
 }
 
 function validateForm() {
@@ -883,6 +825,16 @@ function validateForm() {
     if (!desc) {
         document.getElementById('fDescErr').textContent = 'Descrição obrigatória';
         valid = false;
+    }
+    ['fWeight','fLength','fWidth','fHeight'].forEach(id => {
+        const input = document.getElementById(id);
+        if (Number(input.value) <= 0) {
+            input.classList.add('error');
+            valid = false;
+        }
+    });
+    if (!valid && ['fWeight','fLength','fWidth','fHeight'].some(id => Number(document.getElementById(id).value) <= 0)) {
+        showToast('Preencha peso e dimensões da embalagem para liberar o frete.', 'error');
     }
     return valid;
 }
@@ -907,7 +859,11 @@ productForm.addEventListener('submit', async e => {
         name: document.getElementById('fName').value.trim(),
         category: document.getElementById('fCategory').value,
         price: priceVal !== '' ? parseFloat(priceVal) : null,
+        shortDesc: document.getElementById('fShortDesc').value.trim(),
         desc: document.getElementById('fDesc').value.trim(),
+        features: document.getElementById('fFeatures').value.split('\n').map(item => item.trim()).filter(Boolean),
+        customization: document.getElementById('fCustomization').value.trim() || null,
+        productionTime: document.getElementById('fProductionTime').value.trim() || null,
         weight: parseFloat(document.getElementById('fWeight').value) || null,
         material: document.getElementById('fMaterial').value.trim() || null,
         dimensions: {

@@ -63,6 +63,7 @@ function normalizeProducts(list) {
             images: uniqueImages,
             image: p.image || uniqueImages[0] || null,
             colors: Array.isArray(p.colors) ? p.colors : [],
+            features: Array.isArray(p.features) ? p.features.filter(Boolean) : [],
             dimensions: p.dimensions || {},
         };
     });
@@ -466,7 +467,7 @@ function renderProducts(filter = 'all') {
             <div class="product-body">
                 <div class="product-category">${CATEGORY_LABELS[p.category]}</div>
                 <h3>${p.name}</h3>
-                <p class="product-desc">${p.desc}</p>
+                <p class="product-desc">${escapeHTML(p.shortDesc || p.desc)}</p>
                 <div class="product-footer">
                     <div class="product-price">
                         ${moneyBRL(p.price)}
@@ -911,6 +912,7 @@ function productSpecsHTML(p) {
         p.material ? ['Material', p.material] : null,
         hasDims ? ['Dimensões', `${dims.length || '-'} x ${dims.width || '-'} x ${dims.height || '-'} cm`] : null,
         p.weight ? ['Peso', `${p.weight} g`] : null,
+        p.productionTime ? ['Produção', p.productionTime] : null,
     ].filter(Boolean);
 
     if (!specs.length) return '';
@@ -928,6 +930,24 @@ function productSpecsHTML(p) {
         </div>`;
 }
 
+function productDetailsHTML(p) {
+    const features = Array.isArray(p.features) ? p.features.filter(Boolean) : [];
+    if (!features.length && !p.customization) return '';
+    return `
+        <div class="modal-details">
+            ${features.length ? `
+                <div>
+                    <p class="modal-section-title">Destaques</p>
+                    <ul>${features.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ul>
+                </div>` : ''}
+            ${p.customization ? `
+                <div>
+                    <p class="modal-section-title">Personalização</p>
+                    <p>${escapeHTML(p.customization)}</p>
+                </div>` : ''}
+        </div>`;
+}
+
 function shippingBoxHTML(p) {
     const dims = p.dimensions || {};
     const canQuote = Boolean(p.weight && dims.length && dims.width && dims.height);
@@ -936,7 +956,7 @@ function shippingBoxHTML(p) {
             <p class="modal-section-title">Calcular frete</p>
             <div class="shipping-row">
                 <input type="text" id="shippingCep" inputmode="numeric" maxlength="9" placeholder="Digite seu CEP">
-                <button class="btn btn-outline" id="shippingBtn" ${canQuote ? '' : 'disabled'}>Calcular</button>
+                <button class="btn btn-outline" id="shippingBtn">Calcular</button>
             </div>
             <div class="shipping-result" id="shippingResult">
                 ${canQuote ? 'Informe o CEP para consultar as opções de envio.' : 'Frete disponível depois que peso e dimensões forem cadastrados.'}
@@ -972,6 +992,13 @@ function setupShippingCalculator(p, onSelect = () => {}) {
     });
 
     btn.addEventListener('click', async () => {
+        const dims = p.dimensions || {};
+        if (!(p.weight && dims.length && dims.width && dims.height)) {
+            result.textContent = 'Produto sem peso ou dimensões. Atualize cadastro para calcular frete.';
+            result.className = 'shipping-result error';
+            onSelect(null);
+            return;
+        }
         const cep = cepInput.value.replace(/\D/g, '');
         if (cep.length !== 8) {
             result.textContent = 'Digite um CEP válido com 8 números.';
@@ -1086,6 +1113,7 @@ function openModal(id) {
             <div class="modal-info">
                 <div class="modal-category">${escapeHTML(CATEGORY_LABELS[p.category] || p.category || 'Produto')}</div>
                 <h3>${escapeHTML(p.name)}</h3>
+                ${p.shortDesc ? `<p class="modal-lead">${escapeHTML(p.shortDesc)}</p>` : ''}
                 <p class="modal-desc">${escapeHTML(p.desc)}</p>
                 <div class="modal-price">
                     ${moneyBRL(p.price)}
@@ -1099,6 +1127,7 @@ function openModal(id) {
                             : '<span class="modal-muted">Cor a combinar</span>'}
                     </div>
                 </div>
+                ${productDetailsHTML(p)}
                 ${productSpecsHTML(p)}
                 ${shippingBoxHTML(p)}
                 <div class="modal-purchase">

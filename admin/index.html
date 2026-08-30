@@ -608,48 +608,12 @@
             <form id="productForm" novalidate>
                 <input type="hidden" id="editId">
 
-                <div class="form-grid">
-                    <!-- Coluna esquerda — imagem -->
-                    <div class="form-col">
-                        <label class="field-label">Foto do produto</label>
-                        <div class="image-upload-box" id="imageUploadBox">
-                            <div class="upload-ph" id="uploadPh">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
-                                <p>Clique para selecionar</p>
-                                <span>JPG, PNG ou WebP</span>
-                            </div>
-                            <img id="uploadPreview" class="upload-preview hidden" alt="Preview">
-                            <input type="file" id="imageFile" accept="image/jpeg,image/png,image/webp" hidden>
+                <div class="product-editor">
+                    <section class="editor-section editor-section-main">
+                        <div class="editor-section-head">
+                            <div><span class="editor-step">1</span><div><h3>Informações principais</h3><p>Dados mostrados na vitrine.</p></div></div>
                         </div>
-
-                        <!-- Upload progress -->
-                        <div class="upload-progress-wrap hidden" id="uploadProgressWrap">
-                            <div class="upload-progress-bar" id="uploadProgressBar"></div>
-                            <span id="uploadProgressText">Enviando para Cloudinary…</span>
-                        </div>
-
-                        <p class="field-hint">— ou cole o caminho da foto de capa —</p>
-                        <input type="text" id="imagePublicId" placeholder="Ex: Geek/Pikachu/capa" class="input-full">
-                        <span class="field-hint">Pasta relativa a <code>Produtos/</code></span>
-
-                        <div class="extra-images-section">
-                            <div class="extra-images-header">
-                                <label class="field-label" style="margin-top:14px">Galeria do produto</label>
-                                <button type="button" class="btn btn-cyan btn-sm" id="syncCloudinaryBtn">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg>
-                                    Buscar fotos
-                                </button>
-                            </div>
-                            <p class="field-hint" id="syncHint">Preencha nome e categoria, depois envie várias fotos. O admin sobe tudo para o Cloudinary automaticamente.</p>
-                            <input type="file" id="galleryFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>
-                            <button type="button" class="btn btn-outline btn-sm" id="galleryUploadBtn" style="margin:8px 0;width:100%">+ Enviar várias fotos para o Cloudinary</button>
-                            <div id="extraImagesList"></div>
-                            <button type="button" class="btn btn-outline btn-sm" id="addExtraImageBtn" style="margin-top:8px;width:100%">+ Adicionar caminho manualmente</button>
-                        </div>
-                    </div>
-
-                    <!-- Coluna direita — dados -->
-                    <div class="form-col">
+                        <div class="form-col">
                         <div class="form-group">
                             <label for="fName">Nome do produto *</label>
                             <input type="text" id="fName" required placeholder="Ex: Pikachu">
@@ -677,47 +641,35 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="fDesc">Descrição *</label>
-                            <textarea id="fDesc" rows="4" required placeholder="Descreva o produto, material, tamanhos disponíveis…"></textarea>
+                            <label for="fShortDesc">Resumo para vitrine</label>
+                            <input type="text" id="fShortDesc" maxlength="150" placeholder="Frase curta para o cartão do produto">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fDesc">Descrição completa *</label>
+                            <textarea id="fDesc" rows="5" required placeholder="Explique uso, acabamento, material, tamanhos e diferenciais."></textarea>
                             <span class="form-err" id="fDescErr"></span>
                         </div>
 
                         <div class="form-row-2">
                             <div class="form-group">
-                                <label for="fWeight">Peso para frete</label>
-                                <div class="calc-affix">
-                                    <input type="number" id="fWeight" min="0" step="1" placeholder="0">
-                                    <span class="affix-suf">g</span>
-                                </div>
-                                <span class="field-hint">Peso da peça já embalada, em gramas.</span>
+                                <label for="fFeatures">Destaques do produto</label>
+                                <textarea id="fFeatures" rows="4" placeholder="Um destaque por linha&#10;Acabamento premium&#10;Produção sob medida"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="fCustomization">Personalização</label>
+                                <textarea id="fCustomization" rows="4" placeholder="Explique opções de nome, cor, tamanho ou arte."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="fProductionTime">Prazo de produção</label>
+                                <input type="text" id="fProductionTime" placeholder="Ex: 3 a 5 dias úteis">
                             </div>
                             <div class="form-group">
                                 <label for="fMaterial">Material principal</label>
                                 <input type="text" id="fMaterial" placeholder="PLA, PETG, Resina...">
-                            </div>
-                        </div>
-
-                        <div class="form-row-3">
-                            <div class="form-group">
-                                <label for="fLength">Comprimento</label>
-                                <div class="calc-affix">
-                                    <input type="number" id="fLength" min="0" step="0.1" placeholder="0">
-                                    <span class="affix-suf">cm</span>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="fWidth">Largura</label>
-                                <div class="calc-affix">
-                                    <input type="number" id="fWidth" min="0" step="0.1" placeholder="0">
-                                    <span class="affix-suf">cm</span>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="fHeight">Altura</label>
-                                <div class="calc-affix">
-                                    <input type="number" id="fHeight" min="0" step="0.1" placeholder="0">
-                                    <span class="affix-suf">cm</span>
-                                </div>
                             </div>
                         </div>
 
@@ -731,15 +683,81 @@
 
                         <div class="form-row-2">
                             <div class="form-group">
-                                <label for="fEmoji">Emoji</label>
+                                <label for="fEmoji">Emoji de reserva</label>
                                 <input type="text" id="fEmoji" placeholder="🎮" maxlength="4">
                             </div>
                             <div class="form-group">
-                                <label for="fBadge">Badge</label>
+                                <label for="fBadge">Selo</label>
                                 <input type="text" id="fBadge" placeholder="Ex: Novo, Destaque">
                             </div>
                         </div>
-                    </div>
+                        </div>
+                    </section>
+
+                    <section class="editor-section editor-section-media">
+                        <div class="editor-section-head">
+                            <div><span class="editor-step">2</span><div><h3>Fotos do produto</h3><p>Envie várias de uma vez. Primeira foto vira capa.</p></div></div>
+                            <button type="button" class="btn btn-cyan btn-sm" id="syncCloudinaryBtn">Buscar no Cloudinary</button>
+                        </div>
+                        <input type="hidden" id="imagePublicId">
+                        <input type="file" id="galleryFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>
+                        <button type="button" class="product-gallery-dropzone" id="galleryUploadBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+                            <strong>Arraste fotos ou clique para selecionar</strong>
+                            <span>JPG, PNG ou WebP • várias fotos no mesmo envio</span>
+                        </button>
+                        <div class="upload-progress-wrap hidden" id="uploadProgressWrap">
+                            <div class="upload-progress-bar"><span id="uploadProgressBar"></span></div>
+                            <span id="uploadProgressText">Enviando para Cloudinary…</span>
+                        </div>
+                        <p class="field-hint" id="syncHint">Preencha nome e categoria antes do upload. Use “Definir capa” para trocar a foto principal.</p>
+                        <div id="extraImagesList" class="product-gallery-editor"></div>
+                    </section>
+
+                    <section class="editor-section editor-section-shipping">
+                        <div class="editor-section-head">
+                            <div><span class="editor-step">3</span><div><h3>Frete e embalagem</h3><p>Obrigatório para liberar cálculo no site. Origem: 03810-110.</p></div></div>
+                        </div>
+                        <div class="form-col">
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="fWeight">Peso embalado *</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fWeight" min="1" step="1" placeholder="Ex: 250" required>
+                                    <span class="affix-suf">g</span>
+                                </div>
+                                <span class="field-hint">Peso da peça já embalada, em gramas.</span>
+                            </div>
+                            <div class="shipping-origin"><span>CEP de origem</span><strong>03810-110</strong><small>São Paulo/SP</small></div>
+                        </div>
+
+                        <div class="form-row-3">
+                            <div class="form-group">
+                                <label for="fLength">Comprimento *</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fLength" min="1" step="0.1" placeholder="cm" required>
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fWidth">Largura *</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fWidth" min="1" step="0.1" placeholder="cm" required>
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fHeight">Altura *</label>
+                                <div class="calc-affix">
+                                    <input type="number" id="fHeight" min="1" step="0.1" placeholder="cm" required>
+                                    <span class="affix-suf">cm</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        </div>
+                    </section>
                 </div>
 
                 <div class="modal-footer">

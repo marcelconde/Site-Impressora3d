@@ -269,7 +269,13 @@ function normalizeProductPayload(payload = {}, id = null) {
     badge: cleanString(payload.badge) || null,
     rating: cleanNumber(payload.rating) ?? 5,
     reviews: cleanNumber(payload.reviews) ?? 0,
+    shortDesc: cleanString(payload.shortDesc) || null,
     desc,
+    features: Array.isArray(payload.features)
+      ? payload.features.map(item => cleanString(item)).filter(Boolean)
+      : [],
+    customization: cleanString(payload.customization) || null,
+    productionTime: cleanString(payload.productionTime) || null,
     emoji: cleanString(payload.emoji) || null,
     colors: Array.isArray(payload.colors)
       ? payload.colors.map(color => cleanString(color)).filter(Boolean)
