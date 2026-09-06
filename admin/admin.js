@@ -1386,8 +1386,8 @@ function updateQuoteProductOptions() {
 }
 
 function addQuoteItem(item = {}) {
-    if (quoteItems.length >= 12) {
-        showToast('A OS aceita até 12 itens para manter o PDF em uma página.', 'error');
+    if (quoteItems.length >= 49) {
+        showToast('O orçamento aceita até 49 itens adicionais, além da produção calculada.', 'error');
         return;
     }
     quoteItems.push({
