@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+  <title>Seu orçamento — Forgecon</title><link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="proposta.css">
+</head>
+<body>
+  <header><a href="/">FORGECON</a><span>Seu projeto, próximo de acontecer.</span></header>
+  <main>
+    <p id="pageMessage" role="status">Carregando orçamento…</p>
+    <article id="document" hidden></article>
+    <section id="responseSection" hidden>
+      <h2>Responder ao orçamento</h2>
+      <p>Confirme seu e-mail para registrar sua resposta e receber uma cópia em PDF.</p>
+      <form id="responseForm">
+        <label>Seu nome completo<input id="name" autocomplete="name" required maxlength="160"></label>
+        <label>E-mail para receber a cópia<input id="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <button id="sendCode" type="button">Enviar código por e-mail</button>
+        <label>Código recebido<input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="6 dígitos"></label>
+        <label>Sua decisão<select id="decision"><option value="accepted">Aprovar orçamento</option><option value="changes">Solicitar ajustes</option><option value="declined">Recusar orçamento</option></select></label>
+        <label>Mensagem para a Forgecon<textarea id="message" rows="4" maxlength="2000" placeholder="Conte quais ajustes deseja ou deixe uma observação."></textarea></label>
+        <label class="consent"><input id="consent" type="checkbox" required>Li o orçamento completo e concordo com os itens, valores e condições apresentados.</label>
+        <p class="privacy">Ao responder, seu nome, e-mail confirmado, data, IP e resposta serão registrados para comprovar o aceite e acompanhar o pedido. A cópia será enviada ao e-mail informado. Guarde este link: ele dá acesso ao seu orçamento.</p>
+        <button class="primary" id="respond" type="submit">Confirmar aprovação</button>
+        <p id="formMessage" role="status"></p>
+      </form>
+    </section>
+    <section id="receipt" hidden></section>
+    <button id="download" hidden>Baixar PDF completo</button>
+    <button id="verify" hidden>Verificar integridade</button>
+  </main>
+  <script src="proposta.js"></script>
+</body></html>

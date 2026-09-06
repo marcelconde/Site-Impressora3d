@@ -104,6 +104,7 @@ const CLD_BASE = 'Produtos';
 const SITE_SETTINGS_URL = 'https://api.forgecon.com.br/settings';
 const SHIPPING_QUOTE_URL = 'https://api.forgecon.com.br/shipping/quote';
 const CART_STORAGE_KEY = 'forgecon_cart';
+let cartDeliveryMode = localStorage.getItem('forgecon_delivery_mode') === 'pickup' ? 'pickup' : 'delivery';
 const VIA_CEP_URL = 'https://viacep.com.br/ws';
 const DEFAULT_WHATSAPP_MESSAGE = 'Olá, vim pelo site e gostaria de solicitar um orçamento';
 let SITE_SETTINGS = {
@@ -180,8 +181,7 @@ function normalizeShippingName(value = '') {
 
 function isAllowedShippingOption(opt = {}) {
     const name = normalizeShippingName(opt.name);
-    if (name.includes('JADLOG')) return true;
-    return name.includes('CORREIOS') && (name.includes('PAC') || name.includes('SEDEX'));
+    return /^CORREIOS\s+(PAC|SEDEX)$/.test(name.trim());
 }
 
 /* =============================================
@@ -416,7 +416,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => revealObserver.observe(
    PRODUCTS — RENDER & FILTER
    ============================================= */
 const grid      = document.getElementById('productsGrid');
-const filterBtns = document.querySelectorAll('.filter-btn');
+let filterBtns = document.querySelectorAll('.filter-btn');
 let activeFilter = 'all';
 
 function pvClass(cat) {
@@ -465,7 +465,7 @@ function renderProducts(filter = 'all') {
         <div class="product-card" data-id="${p.id}" tabindex="0" role="button" aria-label="Ver detalhes de ${p.name}">
             ${productPreview(p)}
             <div class="product-body">
-                <div class="product-category">${CATEGORY_LABELS[p.category]}</div>
+                <div class="product-category">${escapeHTML(CATEGORY_LABELS[p.category] || p.category)}</div>
                 <h3>${p.name}</h3>
                 <p class="product-desc">${escapeHTML(p.shortDesc || p.desc)}</p>
                 <div class="product-footer">
@@ -518,14 +518,44 @@ async function syncProductsFromApi() {
     }
 }
 
-if (grid) filterBtns.forEach(btn => {
+function bindProductFilters() { if (grid) filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         filterBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         activeFilter = btn.dataset.filter;
         renderProducts(activeFilter);
     });
-});
+}); }
+bindProductFilters();
+
+async function loadPublicCategories() {
+    try {
+        const res = await fetch('https://api.forgecon.com.br/categories', { cache: 'no-store' });
+        if (!res.ok) return;
+        const { categories } = await res.json();
+        categories.forEach(category => { CATEGORY_LABELS[category.id] = category.name; });
+        const filterContainer = document.querySelector('.filter-btn')?.parentElement;
+        if (filterContainer) {
+            filterContainer.innerHTML = `<button class="filter-btn active" data-filter="all">Todos</button>` + categories.map(category => `<button class="filter-btn" data-filter="${escapeHTML(category.id)}">${escapeHTML(category.name)}</button>`).join('');
+            filterBtns = document.querySelectorAll('.filter-btn');
+            bindProductFilters();
+            filterBtns.forEach(button => button.classList.toggle('active', button.dataset.filter === activeFilter));
+            renderProducts(activeFilter);
+        }
+        const select = document.getElementById('fcat');
+        if (select) {
+            const current = select.value;
+            select.innerHTML = '<option value="">Selecione…</option>' + categories.map(category => `<option value="${escapeHTML(category.id)}">${escapeHTML(category.name)}</option>`).join('');
+            select.value = current;
+        }
+        document.querySelectorAll('.cat-card[data-category]').forEach(card => {
+            const category = categories.find(item => item.id === card.dataset.category);
+            if (!category) card.hidden = true;
+            else if (card.querySelector('h3')) card.querySelector('h3').textContent = category.name;
+        });
+    } catch { /* Static categories remain available when the network is offline. */ }
+}
+loadPublicCategories();
 
 if (grid) {
     renderProducts();
@@ -537,10 +567,21 @@ if (grid) {
    ============================================= */
 let cartItems = loadCartItems();
 
+function setCartDeliveryMode(mode) {
+    cartDeliveryMode = mode === 'pickup' ? 'pickup' : 'delivery';
+    localStorage.setItem('forgecon_delivery_mode', cartDeliveryMode);
+    if (cartDeliveryMode === 'pickup') cartItems.forEach(item => { item.shipping = null; item.cep = null; });
+    saveCartItems();
+    setCartFormError();
+}
+
 function loadCartItems() {
     try {
         const saved = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
-        return Array.isArray(saved) ? saved : [];
+        return Array.isArray(saved) ? saved.filter(item => item && typeof item === 'object').map(item => {
+            if (item.shipping && !isAllowedShippingOption(item.shipping)) return { ...item, shipping: null, cep: null };
+            return item;
+        }) : [];
     } catch {
         return [];
     }
@@ -563,6 +604,7 @@ function cartProductsTotal() {
 }
 
 function shippingValue(item) {
+    if (cartDeliveryMode === 'pickup') return 0;
     return Number(item.shipping?.amount || 0) || parseBRL(item.shipping?.price);
 }
 
@@ -583,6 +625,7 @@ function sameCartItem(a, b) {
 }
 
 function addToCart(item, { open = true } = {}) {
+    if (item.delivery) setCartDeliveryMode(item.delivery);
     const existing = cartItems.find(current => sameCartItem(current, item));
     if (existing) {
         existing.qty = Number(existing.qty || 1) + Number(item.qty || 1);
@@ -610,6 +653,7 @@ function updateCartQty(key, nextQty) {
 
 function getDeliveryData() {
     return {
+        mode: cartDeliveryMode,
         name: document.getElementById('cartCustomerName')?.value.trim() || '',
         phone: document.getElementById('cartCustomerPhone')?.value.trim() || '',
         cep: formatCep(document.getElementById('cartDeliveryCep')?.value || ''),
@@ -624,6 +668,7 @@ function getDeliveryData() {
 }
 
 function validateDeliveryData(delivery) {
+    if (delivery.mode === 'pickup') return !delivery.name || !delivery.phone ? 'Informe seu nome e WhatsApp para combinar a retirada.' : '';
     const required = [
         ['name', 'nome'],
         ['phone', 'WhatsApp'],
@@ -654,7 +699,9 @@ function buildCartMessage(delivery = getDeliveryData()) {
         lines.push(`Quantidade: ${item.qty || 1}`);
         if (item.color) lines.push(`Cor: ${item.color}`);
         if (item.price) lines.push(`Valor unitário: ${moneyBRL(item.price)}`);
-        if (item.shipping?.name) {
+        if (delivery.mode === 'pickup') {
+            lines.push('Retirada no local — sem frete');
+        } else if (item.shipping?.name) {
             lines.push(`Frete selecionado: ${item.shipping.name} - ${item.shipping.price} (${item.shipping.deadline})`);
         } else {
             lines.push('Frete selecionado: a calcular');
@@ -667,20 +714,22 @@ function buildCartMessage(delivery = getDeliveryData()) {
     const grandTotal = cartGrandTotal();
     if (productsTotal > 0) {
         lines.push(`Subtotal dos produtos: ${moneyBRL(productsTotal)}`);
-        lines.push(`Total de frete selecionado: ${shippingTotal > 0 ? moneyBRL(shippingTotal) : 'a calcular'}`);
+        lines.push(`Total de frete selecionado: ${delivery.mode === 'pickup' ? 'R$ 0,00 — retirada' : shippingTotal > 0 ? moneyBRL(shippingTotal) : 'a calcular'}`);
         lines.push(`Total estimado: ${grandTotal > 0 ? moneyBRL(grandTotal) : 'a confirmar'}`);
         lines.push('');
     }
 
-    lines.push('Dados para entrega:');
+    lines.push(delivery.mode === 'pickup' ? 'Retirada no local (endereço e horário a combinar):' : 'Dados para entrega:');
     lines.push(`Nome: ${delivery.name}`);
     lines.push(`WhatsApp: ${delivery.phone}`);
+    if (delivery.mode !== 'pickup') {
     lines.push(`CEP: ${delivery.cep}`);
     lines.push(`Endereço: ${delivery.street}, ${delivery.number}`);
     if (delivery.complement) lines.push(`Complemento: ${delivery.complement}`);
     lines.push(`Bairro: ${delivery.neighborhood}`);
     lines.push(`Cidade/UF: ${delivery.city}/${delivery.state}`);
     if (delivery.reference) lines.push(`Referência: ${delivery.reference}`);
+    }
     lines.push('');
     lines.push('Personalizações e disponibilidade podem ser confirmadas no atendimento.');
 
@@ -728,6 +777,8 @@ function ensureCartUI() {
                     <small>Esses dados serão enviados no WhatsApp.</small>
                 </div>
                 <div class="cart-delivery-grid">
+                    <label class="cart-field-full">Recebimento de todo o pedido<select class="cart-input" id="cartDeliveryMode"><option value="delivery">Entrega</option><option value="pickup">Retirada no local — sem frete</option></select></label>
+                    <p class="cart-field-full" id="cartPickupHint" hidden>Retirada com agendamento. Endereço e horário serão confirmados pelo WhatsApp.</p>
                     <label>Nome completo<input class="cart-input" id="cartCustomerName" type="text" autocomplete="name"></label>
                     <label>WhatsApp<input class="cart-input" id="cartCustomerPhone" type="tel" autocomplete="tel"></label>
                     <label>CEP<input class="cart-input" id="cartDeliveryCep" type="text" inputmode="numeric" maxlength="9" autocomplete="postal-code"></label>
@@ -794,7 +845,15 @@ function renderCartUI() {
     const shippingTotal = cartShippingTotal();
     const grandTotal = cartGrandTotal();
     productsTotalEl.textContent = productsTotal > 0 ? moneyBRL(productsTotal) : 'Consultar';
-    shippingTotalEl.textContent = shippingTotal > 0 ? moneyBRL(shippingTotal) : 'A calcular';
+    shippingTotalEl.textContent = cartDeliveryMode === 'pickup' ? 'R$ 0,00 · retirada' : shippingTotal > 0 ? moneyBRL(shippingTotal) : 'A calcular';
+    const deliverySelect = document.getElementById('cartDeliveryMode');
+    if (deliverySelect) deliverySelect.value = cartDeliveryMode;
+    document.getElementById('cartPickupHint').hidden = cartDeliveryMode !== 'pickup';
+    ['cartDeliveryCep','cartStreet','cartNumber','cartComplement','cartNeighborhood','cartCity','cartState','cartReference'].forEach(id => {
+        const input = document.getElementById(id);
+        input.closest('label').hidden = cartDeliveryMode === 'pickup';
+        input.disabled = cartDeliveryMode === 'pickup';
+    });
     totalEl.textContent = grandTotal > 0 ? moneyBRL(grandTotal) : 'Consultar';
 
     const deliveryCep = document.getElementById('cartDeliveryCep');
@@ -823,7 +882,7 @@ function renderCartUI() {
                 <div class="cart-item-body">
                     <strong>${escapeHTML(item.name)}</strong>
                     <p>${item.color ? `Cor: ${escapeHTML(item.color)}` : 'Cor a combinar'}</p>
-                    ${item.shipping?.name ? `<p>Frete: ${escapeHTML(item.shipping.name)} • ${escapeHTML(item.shipping.price)}</p>` : '<p>Frete: a calcular</p>'}
+                    ${cartDeliveryMode === 'pickup' ? '<p>Retirada no local — sem frete</p>' : item.shipping?.name ? `<p>Frete: ${escapeHTML(item.shipping.name)} • ${escapeHTML(item.shipping.price)}</p>` : '<p>Frete: a calcular</p>'}
                     <div class="cart-item-actions">
                         <button type="button" class="cart-qty" data-cart-dec>-</button>
                         <span>${item.qty || 1}</span>
@@ -873,6 +932,7 @@ async function lookupDeliveryCep(cepValue) {
 }
 
 function setupCartDeliveryForm() {
+    document.getElementById('cartDeliveryMode')?.addEventListener('change', event => setCartDeliveryMode(event.target.value));
     const cep = document.getElementById('cartDeliveryCep');
     const state = document.getElementById('cartState');
     const phone = document.getElementById('cartCustomerPhone');
@@ -953,8 +1013,10 @@ function shippingBoxHTML(p) {
     const canQuote = Boolean(p.weight && dims.length && dims.width && dims.height);
     return `
         <div class="modal-shipping" data-product-id="${p.id}">
-            <p class="modal-section-title">Calcular frete</p>
-            <div class="shipping-row">
+            <label class="modal-section-title" for="productDeliveryMode">Recebimento</label>
+            <select class="cart-input" id="productDeliveryMode"><option value="delivery">Entrega</option><option value="pickup">Retirada no local — sem frete</option></select>
+            <p id="productPickupHint" hidden>Retirada com agendamento. Endereço e horário a combinar pelo WhatsApp.</p>
+            <div class="shipping-row" id="productShippingRow">
                 <input type="text" id="shippingCep" inputmode="numeric" maxlength="9" placeholder="Digite seu CEP">
                 <button class="btn btn-outline" id="shippingBtn">Calcular</button>
             </div>
@@ -985,9 +1047,21 @@ function setupShippingCalculator(p, onSelect = () => {}) {
     const btn = document.getElementById('shippingBtn');
     const result = document.getElementById('shippingResult');
     if (!cepInput || !btn || !result) return;
+    const mode = document.getElementById('productDeliveryMode');
+    mode.value = cartDeliveryMode;
+    const updateMode = () => {
+        const pickup = mode.value === 'pickup';
+        document.getElementById('productShippingRow').hidden = pickup;
+        document.getElementById('productPickupHint').hidden = !pickup;
+        result.hidden = pickup;
+        onSelect(null);
+    };
+    mode.addEventListener('change', updateMode);
+    updateMode();
 
     cepInput.addEventListener('input', () => {
         const digits = cepInput.value.replace(/\D/g, '').slice(0, 8);
+        onSelect(null);
         cepInput.value = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
     });
 
@@ -1019,6 +1093,7 @@ function setupShippingCalculator(p, onSelect = () => {}) {
                 body: JSON.stringify(shippingPayload(p, cep)),
             });
             const data = await res.json().catch(() => ({}));
+            if (mode.value === 'pickup' || cepInput.value.replace(/\D/g, '') !== cep) return;
 
             if (!res.ok || !data.options?.length) {
                 result.textContent = 'Frete será confirmado no atendimento.';
@@ -1038,7 +1113,7 @@ function setupShippingCalculator(p, onSelect = () => {}) {
                 }));
 
             if (!options.length) {
-                result.textContent = 'Nenhuma opção PAC, SEDEX ou Jadlog disponível para este CEP.';
+                result.textContent = 'Nenhuma opção PAC ou SEDEX dos Correios disponível para este CEP. Você pode escolher retirada no local.';
                 result.className = 'shipping-result error';
                 onSelect(null);
                 return;
@@ -1158,7 +1233,7 @@ function openModal(id) {
         const parts = [
             selectedColor ? `Cor: ${selectedColor}` : 'Cor: a combinar',
             `Qtd: ${selectedQty}`,
-            selectedShipping ? `Frete: ${selectedShipping.name} (${selectedShipping.price})` : 'Frete: a calcular',
+            document.getElementById('productDeliveryMode')?.value === 'pickup' ? 'Retirada no local — sem frete' : selectedShipping ? `Frete: ${selectedShipping.name} (${selectedShipping.price})` : 'Frete: a calcular',
         ];
         summary.textContent = parts.join(' • ');
     };
@@ -1182,6 +1257,7 @@ function openModal(id) {
     document.getElementById('qtyPlus')?.addEventListener('click', () => setQty(selectedQty + 1));
 
     const cartPayload = () => ({
+        delivery: document.getElementById('productDeliveryMode').value,
         productId: p.id,
         name: p.name,
         category: p.category,
@@ -1375,17 +1451,14 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
         e.preventDefault();
         if (!validateStep(3)) return;
 
-        // Simulate submission
-        const btn = form.querySelector('[type="submit"]');
-        btn.disabled = true;
-        btn.textContent = 'Enviando…';
-
-        setTimeout(() => {
-            document.querySelectorAll('.form-page').forEach(p => p.classList.remove('active'));
-            const stepsBar = document.querySelector('.form-steps-bar');
-            if (stepsBar) stepsBar.style.display = 'none';
-            if (success) success.classList.add('show');
-        }, 1200);
+        const value = id => document.getElementById(id)?.value || '';
+        const message = ['Olá! Gostaria de solicitar um orçamento.', `Nome: ${value('fname')}`, `E-mail: ${value('femail')}`, `WhatsApp: ${value('fphone')}`, `Cidade: ${value('fcity')}`, `Categoria: ${CATEGORY_LABELS[value('fcat')] || value('fcat')}`, `Quantidade: ${value('fqty')}`, `Recebimento: ${value('fdelivery') === 'pickup' ? 'Retirada no local — sem frete; endereço e horário a combinar' : 'Entrega — frete a combinar'}`, `Pedido: ${value('fdesc')}`, `Prazo: ${document.getElementById('fdeadline')?.selectedOptions[0]?.textContent || ''}`, `Faixa de orçamento: ${document.getElementById('fbudget')?.selectedOptions[0]?.textContent || ''}`].join('\n');
+        window.open(whatsappUrl(message), '_blank', 'noopener');
+        if (success) {
+            success.classList.add('show');
+            success.querySelector('h3').textContent = 'Finalize no WhatsApp';
+            success.querySelector('p').textContent = 'Envie a mensagem na conversa aberta para a Forgecon receber seu pedido. Se a janela não abriu, clique novamente em enviar.';
+        }
     });
 
     if (resetBtn) {

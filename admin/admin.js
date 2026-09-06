@@ -186,6 +186,8 @@ async function showPanel() {
     renderGrid();
     updateStats();
     updateQuoteProductOptions();
+    window.forgeconReady = true;
+    window.dispatchEvent(new Event('forgecon:ready'));
 }
 
 function showLogin() {
@@ -484,7 +486,7 @@ function cardHTML(p) {
             ${photoBadge}
         </div>
         <div class="admin-card-body">
-            <p class="admin-card-cat">${CAT_LABELS[p.category] || p.category}</p>
+            <p class="admin-card-cat">${esc(CAT_LABELS[p.category] || p.category)}</p>
             <h3 class="admin-card-name">${esc(p.name)}</h3>
             <p class="admin-card-price">${price}</p>
             ${specs.length ? `<div class="admin-card-specs">${specs.map(item => `<span>${item}</span>`).join('')}</div>` : ''}
@@ -982,6 +984,8 @@ document.getElementById('adminNav').addEventListener('click', e => {
     document.getElementById('calcView').classList.toggle('hidden', view !== 'calc');
     document.getElementById('usersView').classList.toggle('hidden', view !== 'users');
     document.getElementById('settingsView').classList.toggle('hidden', view !== 'settings');
+    ['quotes','dashboard','categories'].forEach(name => document.getElementById(`${name}View`)?.classList.toggle('hidden', view !== name));
+    if (['quotes','dashboard','categories'].includes(view)) window.loadCommerceView?.(view);
     const auditView = document.getElementById('auditView');
     if (auditView) auditView.classList.toggle('hidden', view !== 'audit');
     if (view === 'users') loadUsersView();
@@ -1215,33 +1219,11 @@ function brl(v) {
 let calcAuditTimer = null; 
 
 function calcUpdate() {
-    const mat      = MATERIALS[document.getElementById('cMaterial').value] || MATERIALS.pla;
-    const priceKg  = parseFloat(document.getElementById('cPriceKg').value) || 0;
-    const qty      = parseFloat(document.getElementById('cQty').value)     || 0;
-    const itemCount = Math.max(1, parseInt(document.getElementById('cBatchQty').value, 10) || 1);
-    const hours    = parseFloat(document.getElementById('cHours').value)   || 0;
-    const mins     = parseFloat(document.getElementById('cMins').value)    || 0;
-    const watts    = parseFloat(document.getElementById('cWatts').value)   || 0;
-    const kwh      = parseFloat(document.getElementById('cKwh').value)     || 0;
-    const errPct   = parseFloat(document.getElementById('cError').value)   || 0;
-    const maintenancePct = parseFloat(document.getElementById('cMaintenance').value) || 0;
-    const modelHours = parseFloat(document.getElementById('cModelHours').value) || 0;
-    const hourlyRate = parseFloat(document.getElementById('cHourlyRate').value) || 0;
-    const accessoryUnitCost = parseFloat(document.getElementById('cAccessory').value) || 0;
-    const accessoryCost = accessoryUnitCost * itemCount;
-    const packagingCost = parseFloat(document.getElementById('cPackaging').value) || 0;
-    const shippingCost = parseFloat(document.getElementById('cShipping').value) || 0;
-
-    const matCost    = (qty / mat.div) * priceKg;
-    const totalHours = hours + mins / 60;
-    const engCost    = (watts / 1000) * totalHours * kwh;
-    const subtotal   = matCost + engCost;
-    const errCost    = subtotal * (errPct / 100);
-    const maintenanceCost = subtotal * (maintenancePct / 100);
-    const modelingCost = modelHours * hourlyRate;
-    const total = subtotal + errCost + maintenanceCost + modelingCost + accessoryCost + packagingCost + shippingCost;
-    const unitWeight = qty / itemCount;
-    const unitCost = total / itemCount;
+    const calc = calcSnapshot();
+    const { qty, itemCount, hours, mins, matCost, engCost, subtotal, errPct, errCost,
+        maintenancePct, maintenanceCost, modelingCost, accessoryUnitCost, accessoryCost,
+        packagingCost, shippingCost, total, unitWeight, unitCost } = calc;
+    const mat = { unit: calc.unit };
 
     document.getElementById('rMaterial').textContent  = brl(matCost);
     document.getElementById('rEnergy').textContent    = brl(engCost);
@@ -1336,7 +1318,7 @@ function calcSnapshot() {
     const accessoryUnitCost = parseFloat(document.getElementById('cAccessory').value) || 0;
     const accessoryCost = accessoryUnitCost * itemCount;
     const packagingCost = parseFloat(document.getElementById('cPackaging').value) || 0;
-    const shippingCost = parseFloat(document.getElementById('cShipping').value) || 0;
+    const shippingCost = document.getElementById('qDelivery')?.value === 'pickup' ? 0 : parseFloat(document.getElementById('cShipping').value) || 0;
     const matCost  = (qty / mat.div) * priceKg;
     const totalHours = hours + mins / 60;
     const engCost  = (watts / 1000) * totalHours * kwh;
@@ -1391,7 +1373,7 @@ function quoteCalculatedPrice(calc = calcSnapshot()) {
         profit200: 3,
     };
     const multiplier = multipliers[quoteEls.pricingMode?.value] || 1;
-    return quoteEls.includeCalculated?.checked ? calc.total * multiplier : 0;
+    return quoteEls.includeCalculated?.checked ? Math.round((calc.total * multiplier / calc.itemCount + Number.EPSILON) * 100) / 100 * calc.itemCount : 0;
 }
 
 function updateQuoteProductOptions() {
@@ -1512,7 +1494,7 @@ function readQuoteForm() {
         name: 'Produção 3D e execução do pedido',
         description: `${calc.qty.toFixed(2).replace('.', ',')} ${calc.unit} no lote • ${calc.unitWeight.toFixed(2).replace('.', ',')} ${calc.unit} por unidade • ${calc.totalHours.toFixed(2).replace('.', ',')} h de impressão.`,
         quantity: calc.itemCount,
-        unitPrice: calculatedValue / calc.itemCount,
+        unitPrice: Math.round((calculatedValue / calc.itemCount + Number.EPSILON) * 100) / 100,
         calculated: true,
     }] : [];
     const items = [...calculatedItem, ...extraItems];
@@ -1533,233 +1515,6 @@ function readQuoteForm() {
     };
 }
 
-function addWrappedText(doc, text, x, y, maxWidth, lineHeight = 13) {
-    const lines = doc.splitTextToSize(String(text || ''), maxWidth);
-    doc.text(lines, x, y);
-    return y + lines.length * lineHeight;
-}
-
-function drawQuoteHeader(doc, quote) {
-    doc.setFillColor(8, 8, 20);
-    doc.rect(0, 0, 595, 112, 'F');
-    doc.setFillColor(124, 58, 237);
-    doc.rect(0, 108, 595, 4, 'F');
-    doc.setFillColor(14, 165, 233);
-    doc.rect(150, 108, 445, 4, 'F');
-
-    doc.setDrawColor(124, 58, 237);
-    doc.setLineWidth(2);
-    doc.line(42, 44, 62, 32);
-    doc.line(62, 32, 82, 44);
-    doc.line(82, 44, 82, 68);
-    doc.line(82, 68, 62, 80);
-    doc.line(62, 80, 42, 68);
-    doc.line(42, 68, 42, 44);
-    doc.setFillColor(14, 165, 233);
-    doc.circle(62, 56, 11, 'F');
-
-    doc.setTextColor(245, 247, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(24);
-    doc.text('FORGECON', 102, 54);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(158, 170, 198);
-    doc.text('IMPRESSAO 3D PROFISSIONAL', 103, 70);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(245, 247, 255);
-    doc.text('ORDEM DE SERVICO', 410, 48);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(190, 198, 218);
-    doc.text(quote.number, 430, 65);
-    doc.text(`Emitido em ${quote.date}`, 430, 80);
-}
-
-function drawInfoBox(doc, title, rows, x, y, w) {
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(225, 230, 240);
-    doc.roundedRect(x, y, w, 70, 8, 8, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(124, 58, 237);
-    doc.text(title, x + 14, y + 20);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(68, 77, 96);
-    let cursor = y + 37;
-    rows.forEach(row => {
-        doc.text(row, x + 14, cursor);
-        cursor += 14;
-    });
-}
-
-function fitPdfText(doc, text, maxWidth) {
-    let value = String(text || '').replace(/\s+/g, ' ').trim();
-    if (!value) return '-';
-    while (value.length > 4 && doc.getTextWidth(value) > maxWidth) value = value.slice(0, -1);
-    return value === String(text || '').replace(/\s+/g, ' ').trim() ? value : `${value.slice(0, -3)}...`;
-}
-
-function drawItemsTable(doc, quote, y, margin, pageW) {
-    const tableW = pageW - margin * 2;
-    const columns = { item: 14, qty: 330, unit: 415, total: 500 };
-    const rowHeight = Math.max(23, Math.min(38, 300 / Math.max(1, quote.items.length)));
-
-    doc.setFillColor(15, 23, 42);
-    doc.roundedRect(margin, y, tableW, 28, 6, 6, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text('ITEM', margin + columns.item, y + 18);
-    doc.text('PRODUTO / SERVICO', margin + 42, y + 18);
-    doc.text('QTD.', margin + columns.qty, y + 18, { align: 'right' });
-    doc.text('UNITARIO', margin + columns.unit, y + 18, { align: 'right' });
-    doc.text('SUBTOTAL', margin + columns.total, y + 18, { align: 'right' });
-    y += 28;
-
-    quote.items.forEach((item, index) => {
-        if (index % 2 === 0) {
-            doc.setFillColor(248, 250, 252);
-            doc.rect(margin, y, tableW, rowHeight, 'F');
-        }
-        doc.setDrawColor(226, 232, 240);
-        doc.line(margin, y + rowHeight, pageW - margin, y + rowHeight);
-        doc.setTextColor(30, 41, 59);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.text(String(index + 1).padStart(2, '0'), margin + columns.item, y + 15);
-        doc.text(fitPdfText(doc, item.name || 'Item sem nome', 265), margin + 42, y + 13);
-        if (rowHeight >= 30 && item.description) {
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(6.8);
-            doc.setTextColor(100, 116, 139);
-            doc.text(fitPdfText(doc, item.description, 265), margin + 42, y + 25);
-        }
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8.5);
-        doc.setTextColor(30, 41, 59);
-        doc.text(String(item.quantity), margin + columns.qty, y + 15, { align: 'right' });
-        doc.text(brl(item.unitPrice), margin + columns.unit, y + 15, { align: 'right' });
-        doc.setFont('helvetica', 'bold');
-        doc.text(brl(item.quantity * item.unitPrice), margin + columns.total, y + 15, { align: 'right' });
-        y += rowHeight;
-    });
-    return y;
-}
-
-function generateQuotePdf() {
-    const jsPDF = window.jspdf?.jsPDF;
-    const quote = readQuoteForm();
-    if (!quote.items.length || !quote.salePrice) {
-        showToast('Adicione ao menos um item com valor antes de gerar a OS.', 'error');
-        return;
-    }
-    if (!jsPDF) {
-        openQuotePrintFallback(quote);
-        return;
-    }
-
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const margin = 42;
-    const pageW = 595;
-    const pageH = 842;
-
-    drawQuoteHeader(doc, quote);
-    drawInfoBox(doc, 'CLIENTE', [
-        quote.client,
-        quote.phone ? `Contato: ${quote.phone}` : 'Contato nao informado',
-    ], margin, 132, 245);
-    drawInfoBox(doc, 'DOCUMENTO', [
-        quote.number,
-        `Emissao: ${quote.date}`,
-        `Valido ate: ${quote.validUntil}`,
-    ], 308, 132, 245);
-
-    let y = drawItemsTable(doc, quote, 222, margin, pageW) + 18;
-
-    doc.setFillColor(124, 58, 237);
-    doc.roundedRect(margin, y, pageW - margin * 2, 58, 10, 10, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text('VALOR TOTAL', margin + 20, y + 34);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(25);
-    doc.text(brl(quote.salePrice), pageW - margin - 20, y + 38, { align: 'right' });
-    y += 82;
-
-    doc.setTextColor(15, 23, 42);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('Forma de pagamento', margin, y);
-    doc.text('Observacoes', 308, y);
-    y += 18;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(fitPdfText(doc, quote.payment, 220), margin, y);
-    const noteLines = doc.splitTextToSize(quote.notes || 'Prazo, frete e acabamento final devem ser confirmados antes da producao.', 245).slice(0, 3);
-    doc.text(noteLines, 308, y);
-
-    doc.setDrawColor(226, 232, 240);
-    doc.line(margin, pageH - 78, pageW - margin, pageH - 78);
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text('Forgecon - Impressao 3D Profissional', margin, pageH - 55);
-    doc.text('Orcamento sujeito a alteracao conforme ajustes de arquivo, acabamento, prazo e disponibilidade de material.', margin, pageH - 42);
-
-    const safeName = quote.client.toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cliente';
-    doc.save(`${quote.number}-${safeName}.pdf`);
-
-    recordAdminAudit('gerou_os', 'calculadora', null, {
-        cliente: quote.client,
-        itens: quote.items.length,
-        valor: brl(quote.salePrice),
-    });
-    showToast('OS em PDF gerada.');
-}
-
-function openQuotePrintFallback(quote) {
-    const win = window.open('', '_blank');
-    if (!win) {
-        showToast('Não foi possível abrir a janela de impressão.', 'error');
-        return;
-    }
-    win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(quote.number)}</title>
-        <style>
-            *{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;color:#0f172a;background:#fff}
-            header{background:#080814;color:#fff;padding:24px 36px;border-bottom:5px solid #7c3aed;display:flex;justify-content:space-between}
-            h1{margin:0;font-size:28px;letter-spacing:2px}.sub{color:#9aa6c0;margin-top:4px}.doc{text-align:right}.doc strong{display:block;font-size:18px}
-            main{padding:24px 36px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-            .box{border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px}.box p{margin:8px 0 0;line-height:1.45}
-            table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0f172a;color:#fff;text-align:left;padding:9px}td{padding:8px;border-bottom:1px solid #e2e8f0}th:nth-child(n+2),td:nth-child(n+2){text-align:right}.item-desc{display:block;color:#64748b;font-size:10px;margin-top:3px}
-            .total{background:#7c3aed;color:#fff;border-radius:10px;padding:16px 20px;margin-top:16px;display:flex;justify-content:space-between;align-items:center}.total strong{font-size:26px}
-            button{margin:16px 36px;padding:10px 16px}@page{size:A4;margin:0}@media print{button{display:none}body{width:210mm;height:297mm;overflow:hidden}}
-        </style></head><body>
-        <header><div><h1>FORGECON</h1><div class="sub">IMPRESSAO 3D PROFISSIONAL</div></div><div class="doc"><strong>ORDEM DE SERVICO</strong>${esc(quote.number)}<br>${esc(quote.date)}</div></header>
-        <main>
-            <div class="grid">
-                <div class="box"><strong>Cliente</strong><p>${esc(quote.client)}<br>${esc(quote.phone || 'Contato nao informado')}<br>Valido ate ${esc(quote.validUntil)}</p></div>
-                <div class="box"><strong>Documento</strong><p>${esc(quote.number)}<br>Emitido em ${esc(quote.date)}<br>Valido ate ${esc(quote.validUntil)}</p></div>
-            </div>
-            <table><thead><tr><th>Produto / servico</th><th>Qtd.</th><th>Unitario</th><th>Subtotal</th></tr></thead><tbody>
-                ${quote.items.map(item => `<tr><td><strong>${esc(item.name || 'Item')}</strong>${item.description ? `<span class="item-desc">${esc(item.description)}</span>` : ''}</td><td>${item.quantity}</td><td>${brl(item.unitPrice)}</td><td><strong>${brl(item.quantity * item.unitPrice)}</strong></td></tr>`).join('')}
-            </tbody></table>
-            <div class="total"><span>VALOR TOTAL</span><strong>${brl(quote.salePrice)}</strong></div>
-            <div class="grid" style="margin-top:20px">
-                <div class="box"><strong>Pagamento</strong><p>${esc(quote.payment)}</p></div>
-                <div class="box"><strong>Observacoes</strong><p>${esc(quote.notes || 'A combinar').replace(/\n/g, '<br>')}</p></div>
-            </div>
-            <button onclick="window.print()">Imprimir / salvar PDF</button>
-        </main></body></html>`);
-    win.document.close();
-    win.focus();
-}
 
 quoteEls.items?.addEventListener('input', event => {
     const field = event.target.dataset.itemField;
@@ -1791,7 +1546,7 @@ quoteEls.addProduct?.addEventListener('click', () => {
 });
 quoteEls.includeCalculated?.addEventListener('change', updateQuoteTotal);
 quoteEls.pricingMode?.addEventListener('change', updateQuoteTotal);
-quoteEls.pdf?.addEventListener('click', generateQuotePdf);
+quoteEls.pdf?.addEventListener('click', () => window.publishQuote());
 updateQuoteProductOptions();
 renderQuoteItems();
 

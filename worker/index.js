@@ -1,3 +1,5 @@
+import { handleCommercial, deliverPending } from './commercial.js';
+
 const ALLOWED_ORIGIN = 'https://forgecon.com.br';
 
 function cors(origin) {
@@ -335,6 +337,7 @@ async function createProduct(db, payload, userId) {
 
   const now = Math.floor(Date.now() / 1000);
   const draft = normalized.product;
+  if (!await db.prepare('SELECT id FROM categories WHERE id = ?').bind(draft.category).first()) return { error: 'Categoria não encontrada. Atualize a lista.' };
   const result = await db.prepare(
     `INSERT INTO products (name, category, data, active, created_at, updated_at, updated_by)
      VALUES (?, ?, ?, 1, ?, ?, ?)`
@@ -360,6 +363,7 @@ async function updateProduct(db, id, payload, userId) {
 
   const now = Math.floor(Date.now() / 1000);
   const product = normalized.product;
+  if (!await db.prepare('SELECT id FROM categories WHERE id = ?').bind(product.category).first()) return { error: 'Categoria não encontrada. Atualize a lista.' };
   await db.prepare(
     `UPDATE products
      SET name = ?, category = ?, data = ?, updated_at = ?, updated_by = ?
@@ -391,12 +395,7 @@ function isAllowedShippingOption(item = {}) {
   const company = normalizeShippingName(item.company?.name);
   const service = normalizeShippingName(item.name);
 
-  if (company.includes('JADLOG')) return true;
-  if (company.includes('CORREIOS')) {
-    return service.includes('PAC') || service.includes('SEDEX');
-  }
-
-  return false;
+  return company.trim() === 'CORREIOS' && ['PAC', 'SEDEX'].includes(service.trim()) && [1, 2].includes(Number(item.id));
 }
 
 async function quoteShipping(env, payload = {}) {
@@ -440,7 +439,7 @@ async function quoteShipping(env, payload = {}) {
       own_hand: false,
       collect: false,
     },
-    services: env.MELHOR_ENVIO_SERVICES || undefined,
+    services: '1,2', // Melhor Envio: Correios PAC and SEDEX only.
   };
 
   const res = await fetch('https://www.melhorenvio.com.br/api/v2/me/shipment/calculate', {
@@ -479,6 +478,9 @@ async function quoteShipping(env, payload = {}) {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(deliverPending(env));
+  },
   async fetch(request, env) {
     try {
       return await handleRequest(request, env);
@@ -500,6 +502,9 @@ async function handleRequest(request, env) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors(origin) });
   }
+
+  const commercial = await handleCommercial(request, env, { json, err, cors, getSessionUser, tokenFromRequest });
+  if (commercial) return commercial;
 
   if (path === '/' || path === '/health') {
     return json({

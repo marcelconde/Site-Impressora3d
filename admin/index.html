@@ -481,6 +481,7 @@
                                     </div>
                                 </div>
                                 <p class="quote-calculation-warning">Material, energia, falhas, manutenção, modelagem, acessórios, embalagem e envio já entram neste valor. Não repita esses custos como itens adicionais.</p>
+                                <p class="field-hint">O preço por unidade é arredondado para centavos. O total do orçamento corresponde à quantidade multiplicada por esse preço.</p>
                             </div>
 
                             <div class="quote-product-box" id="quoteProductBox">
@@ -807,8 +808,8 @@
     <!-- ── TOAST ──────────────────────────────────── -->
     <div class="toast hidden" id="toast"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
     <script src="admin.js"></script>
+    <script src="commerce.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });

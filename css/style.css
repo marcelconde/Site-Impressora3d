@@ -2279,3 +2279,6 @@ select option { background: var(--bg3); color: var(--text); }
 
     .hstat { flex: 1 0 50%; }
 }
+[hidden] { display: none !important; }
+#productDeliveryMode { width: 100%; margin: 10px 0 16px; }
+#cartPickupHint, #productPickupHint { font-size: 13px; color: var(--text-muted, #a5aac1); line-height: 1.6; }
