@@ -5,8 +5,8 @@ const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = cents => (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const labels = {awaiting:'Aguardando sua resposta',accepted:'Aprovado',declined:'Recusado',changes:'Ajustes solicitados',expired:'Prazo encerrado',superseded:'Substituído por uma nova versão'};
-async function request(path = '', data) {
-  const res = await fetch(api+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined,cache:'no-store'});
+async function request(path = '', data, signal) {
+  const res = await fetch(api+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined,cache:'no-store',signal});
   const result = await res.json(); if(!res.ok) throw new Error(result.error || 'Não foi possível concluir.'); return result;
 }
 function render(q) {
@@ -30,6 +30,37 @@ $('responseForm').addEventListener('submit',async event=>{
   catch(e){$('formMessage').textContent=e.message;}finally{$('respond').disabled=false;}
 });
 $('download').addEventListener('click',async()=>{ $('download').disabled=true;try{const res=await fetch(api+'/pdf');if(!res.ok)throw new Error('Falha ao baixar PDF.');const url=URL.createObjectURL(await res.blob());const a=document.createElement('a');a.href=url;a.download='orcamento-forgecon.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){$('pageMessage').textContent=e.message;}finally{$('download').disabled=false;}});
-$('verify').addEventListener('click',async()=>{try{const r=await request('/verify');$('pageMessage').textContent=r.validDocument&&r.validReceipt!==false?'Integridade confirmada: documento e registro correspondem aos hashes armazenados.':'Não foi possível confirmar a integridade. Contate a Forgecon.';}catch(e){$('pageMessage').textContent=e.message;}});
+$('verify').addEventListener('click', async () => {
+  const button = $('verify');
+  const message = $('verificationMessage');
+  button.disabled = true;
+  button.textContent = 'Verificando…';
+  message.className = 'verification-message';
+  message.textContent = 'Conferindo os dados salvos do orçamento…';
+  message.scrollIntoView({ block: 'nearest' });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const result = await request('/verify', undefined, controller.signal);
+    if (result.validDocument === true && result.validReceipt === true) {
+      message.textContent = 'Integridade confirmada: o orçamento e o registro da resposta correspondem aos hashes armazenados.';
+      message.classList.add('success');
+    } else if (result.validDocument === true && result.validReceipt === null) {
+      message.textContent = 'Integridade do orçamento confirmada. Ainda não há resposta do cliente registrada para conferir.';
+      message.classList.add('success');
+    } else {
+      message.textContent = 'Não foi possível confirmar a integridade dos dados. Entre em contato com a Forgecon.';
+      message.classList.add('error');
+    }
+  } catch {
+    message.textContent = 'Não foi possível consultar a verificação agora. Tente novamente.';
+    message.classList.add('error');
+  } finally {
+    clearTimeout(timeout);
+    button.disabled = false;
+    button.textContent = 'Verificar integridade';
+    message.scrollIntoView({ block: 'nearest' });
+  }
+});
 if(!/^[a-f0-9]{64}$/.test(token))$('pageMessage').textContent='Link inválido. Abra o link completo recebido no PDF.';
 else request().then(r=>render(r.quote)).catch(e=>{$('pageMessage').textContent=e.message;});

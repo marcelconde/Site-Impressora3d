@@ -50,3 +50,63 @@ test('public budget shows complete terms, verifies email before decision and dis
   await page.screenshot({path:'/tmp/forgecon-public-mobile.png',fullPage:true});
   await page.locator('#code').fill('123456');await page.locator('#consent').check();await page.locator('#respond').click();await expect(page.locator('#receipt')).toContainText('ACE-1234');await expect(page.locator('#responseSection')).toBeHidden();
 });
+
+for (const width of [1280, 390]) {
+  test(`integrity feedback stays visible by the button at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.clock.install();
+    const token = 'd'.repeat(64);
+    const quote = {
+      number: 'ORC-TESTE', status: 'awaiting', documentHash: 'e'.repeat(64),
+      document: { client: 'Cliente teste', date: '06/09/2026', validUntil: '13/09/2026',
+        items: [{ name: 'Chaveiro', description: 'Peça personalizada', quantity: 1, unitCents: 1000, totalCents: 1000 }],
+        totalCents: 1000, delivery: 'pickup', deliveryDetails: 'Retirada agendada', payment: 'Pix', notes: 'A combinar.' },
+    };
+    let pendingRoute;
+    let result = null;
+    await page.route(`https://api.forgecon.com.br/quotes/public/${token}**`, route => {
+      if (!route.request().url().endsWith('/verify')) return route.fulfill({ json: { quote } });
+      if (result === 'network-error') return route.abort('failed');
+      if (result) return route.fulfill({ json: result });
+      pendingRoute = route;
+    });
+    await page.goto(`/proposta/#${token}`);
+    const button = page.locator('#verify');
+    const message = page.locator('#verificationMessage');
+    await button.click();
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveText('Verificando…');
+    await expect(message).toContainText('Conferindo');
+    await expect(message).toBeInViewport();
+    await expect(page.locator('#pageMessage')).not.toBeInViewport();
+    await expect.poll(() => Boolean(pendingRoute)).toBe(true);
+    await pendingRoute.fulfill({ json: { validDocument: true, validReceipt: null } });
+    await expect(message).toContainText('Ainda não há resposta');
+    await expect(message).toBeInViewport();
+    await expect(button).toBeEnabled();
+
+    result = { validDocument: true, validReceipt: true };
+    await button.click();
+    await expect(message).toContainText('o orçamento e o registro da resposta');
+    await expect(message).toHaveClass(/success/);
+
+    result = { validDocument: true, validReceipt: false };
+    await button.click();
+    await expect(message).toContainText('Não foi possível confirmar');
+    await expect(message).toHaveClass(/error/);
+    await expect(message).toBeInViewport();
+
+    result = 'network-error';
+    await button.click();
+    await expect(message).toContainText('Tente novamente');
+    await expect(button).toBeEnabled();
+
+    result = null;
+    await button.click();
+    await expect(button).toBeDisabled();
+    await page.clock.fastForward(15000);
+    await expect(message).toContainText('Tente novamente');
+    await expect(button).toBeEnabled();
+    await expect(message).toBeInViewport();
+  });
+}
