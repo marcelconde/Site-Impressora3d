@@ -32,7 +32,7 @@ function frame(preheader, content) {
   </td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
-<p style="max-width:540px;margin:20px auto 0;font-size:11px;line-height:18px;color:#94a3b8;">Esta é uma mensagem automática referente ao seu orçamento.<br>Para falar com a Forgecon, utilize os canais de atendimento no site.</p>
+<p style="max-width:540px;margin:20px auto 0;font-size:11px;line-height:18px;color:#94a3b8;">Esta é uma mensagem automática referente ao seu orçamento ou pedido.<br>Para falar com a Forgecon, utilize os canais de atendimento no site.</p>
 </td></tr></table>
 </body></html>`;
 }
@@ -69,6 +69,7 @@ export function quoteReceiptEmail(row) {
     </table>
     <p style="${paragraph}margin-top:24px;"><strong style="color:#7dd3fc;">Seu PDF está anexado.</strong><br>Guarde a cópia completa do orçamento e o registro da sua resposta. Você também pode consultá-los pelo botão abaixo.</p>
     ${button(url, 'Ver orçamento e comprovante')}
+    ${response.action === 'accepted' ? button(`https://forgecon.com.br/acompanhar/#${row.token}`, 'Acompanhar meu pedido') : ''}
     ${response.message ? `<p style="${paragraph}"><strong style="color:#e2e8f0;">Sua mensagem</strong><br>${escape(response.message).replace(/\n/g, '<br>')}</p>` : ''}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;"><tr><td style="padding:22px 0 0;border-top:1px solid #2b2547;">
       <p style="margin:0 0 12px;font-size:11px;line-height:18px;letter-spacing:1.5px;font-weight:bold;color:#a78bfa;">${response.action === 'accepted' ? 'COMPROVANTE DO ACEITE' : 'COMPROVANTE DA RESPOSTA'}</p>
@@ -101,5 +102,35 @@ export function quoteCodeEmail(row, code) {
       <p style="${paragraph}">Após confirmar o e-mail, você poderá aprovar, recusar ou solicitar ajustes no orçamento.</p>
       <p style="margin:0;font-size:12px;line-height:20px;color:#94a3b8;">Não compartilhe este código. Se você não solicitou esta confirmação, ignore a mensagem.</p>`),
     text: `FORGECON — IMPRESSÃO 3D PROFISSIONAL\n\nCódigo de confirmação: ${code}\nOrçamento: ${row.number}\nVálido por 10 minutos.\n\nDigite o código na página do orçamento para confirmar seu e-mail e registrar sua resposta.\n${url}\n\nNão compartilhe o código. Se não solicitou, ignore esta mensagem.`,
+  };
+}
+
+export function orderEmail(row, update) {
+  const doc = JSON.parse(row.document);
+  const name = JSON.parse(row.response).name;
+  const url = `https://forgecon.com.br/acompanhar/#${row.token}`;
+  const labels = {pending:'Aguardando produção',production:'Em produção',ready:doc.delivery==='pickup'?'Pronto para retirada':'Pronto para envio',dispatched:'Enviado pelos Correios',delivered:doc.delivery==='pickup'?'Retirado pelo cliente':'Entregue',completed:'Pedido concluído',cancelled:'Pedido cancelado'};
+  const access = update.kind === 'access';
+  const title = access ? 'Seu pedido, de perto.' : update.kind === 'payment' ? 'Pagamento registrado.' : update.details?.trackingChanged ? 'Rastreio atualizado.' : `${labels[update.status]}.`;
+  const date = new Date(update.at*1000).toLocaleString('pt-BR',{timeZone:'America/Recife'});
+  const tracking = !access && update.trackingCode ? `Código de rastreio: ${update.trackingCode}` : '';
+  const finances = access ? '' : `Total: ${money(row.total_cents)} · Recebido: ${money(update.paidCents)} · Saldo: ${money(row.total_cents-update.paidCents)}`;
+  const description = access ? 'Você solicitou acesso ao acompanhamento. Use o botão abaixo para consultar as etapas, pagamentos e informações de recebimento, sem precisar de senha.' : update.kind==='payment' ? `Registramos o recebimento de ${money(update.details.amountCents)}. Você pode conferir todos os pagamentos no acompanhamento.` : update.status==='cancelled' ? 'O pedido foi cancelado. Os pagamentos anteriores permanecem registrados; eventuais reembolsos devem ser combinados com a Forgecon.' : update.status==='ready' && doc.delivery==='pickup' ? 'Sua peça está pronta! Combine o horário de retirada com a Forgecon.' : 'A Forgecon atualizou o andamento do seu pedido. Confira os detalhes abaixo.';
+  return {
+    subject: `${access?'Acompanhar pedido':title} ${row.number} — Forgecon`,
+    html: frame(`${title} Pedido ${row.number}.`, `
+      <p style="color:#a78bfa;font-size:11px;letter-spacing:2px;font-weight:bold;">ACOMPANHAMENTO DO PEDIDO</p>
+      <h1 style="margin:20px 0;font-size:30px;line-height:38px;color:#f1f5f9;">${escape(title)}</h1>
+      <p style="${paragraph}">Olá, <strong style="color:#e2e8f0;">${escape(name)}</strong>.<br>${escape(description)}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;background-color:#191532;border:1px solid #493478;border-radius:12px;"><tr><td style="padding:24px;">
+        <p style="margin:0 0 12px;font-size:13px;color:#c4b5fd;">Pedido ${escape(row.number)}</p>
+        ${access?'':`<p style="font-size:24px;line-height:32px;font-weight:bold;color:#f1f5f9;">${escape(labels[update.status])}</p><p style="${paragraph}">${escape(finances)}</p>`}
+        <p style="${paragraph}">${doc.delivery==='pickup'?'Retirada no local':'Entrega pelos Correios'}<br>${escape(doc.deliveryDetails).replace(/\n/g,'<br>')}</p>
+        ${tracking?`<p style="font-size:13px;color:#b8c2d5;">Código de rastreio<br><strong style="font-size:18px;line-height:30px;color:#7dd3fc;white-space:nowrap;">${escape(update.trackingCode)}</strong></p><p style="${paragraph}"><a style="color:#7dd3fc;" href="https://rastreamento.correios.com.br/app/index.php">Consultar nos Correios</a><br>A postagem pode levar algum tempo para aparecer no rastreio.</p>`:''}
+      </td></tr></table>
+      ${button(url,'Acompanhar meu pedido')}
+      ${access?'':`<p style="${paragraph}">Atualização registrada em ${escape(date)} (horário de Brasília). O acompanhamento mostra a situação mais recente.</p>`}
+      <p style="font-size:12px;line-height:20px;color:#94a3b8;">Este link é privado e dá acesso ao seu pedido. Não o compartilhe. ${access?'Se não solicitou este e-mail, ignore a mensagem.':''}</p>`),
+    text: `FORGECON\n\n${title}\nOlá, ${name}. ${description}\n\nPedido: ${row.number}\n${access?'':`Situação: ${labels[update.status]}\n${finances}\nRegistrado em ${date} (horário de Brasília)\n`}${doc.delivery==='pickup'?'Retirada no local':'Entrega pelos Correios'}\n${doc.deliveryDetails}\n${tracking?`${tracking}\nhttps://rastreamento.correios.com.br/app/index.php\n`:''}\nAcompanhar meu pedido: ${url}\n\nEste link é privado. Não o compartilhe.`,
   };
 }

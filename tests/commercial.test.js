@@ -1,16 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import worker from '../worker/index.js';
 import { normalizeQuote, digest, deliverPending } from '../worker/commercial.js';
 import { PDFDocument } from 'pdf-lib';
+import { orderEmail } from '../worker/quote-emails.js';
 
 // Executes the actual queries against SQLite, including atomic D1-style batches.
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../worker/schema.sql',import.meta.url),'utf8'));
-  sqlite.exec(readFileSync(new URL('../worker/migrations/0001_commercial.sql',import.meta.url),'utf8'));
+  for (const file of readdirSync(new URL('../worker/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(`../worker/migrations/${file}`,import.meta.url),'utf8'));
   sqlite.exec("INSERT INTO users(id,email,name,password_hash,password_salt,role) VALUES(1,'admin@example.com','Admin','x','x','admin'); INSERT INTO sessions(token,user_id,expires_at) VALUES('admin',1,9999999999)");
   const db = {
     prepare(sql) {
@@ -148,4 +149,121 @@ test('concurrent publication, decisions and payments create exactly one record',
   const payments=await Promise.all([f.api(`/quotes/${q.id}/payments`,'POST',payment),f.api(`/quotes/${q.id}/payments`,'POST',payment)]);
   assert.deepEqual(payments.map(r=>r.status).sort(),[200,201]);
   assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM quote_payments').get().n,1);
+});
+
+test('order lookup never exposes a token, validates verified email and throttles queued access',async t=>{
+  const messages=mockMail(t),f=fixture(),q=await create(f);
+  assert.equal((await f.api(`/orders/${q.token}`,'GET',null,false)).status,404);
+  await respond(f,q,messages);
+  const lookup=(email,number=q.number)=>f.api('/orders/access','POST',{email,number},false);
+  const missing=await lookup('unknown@example.com');
+  const matched=await lookup(' CLIENT@example.com ');
+  assert.equal(matched.status,202);assert.deepEqual(await matched.json(),await missing.json());
+  await Promise.all([lookup('client@example.com'),lookup('client@example.com')]);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM order_mail').get().n,1);
+  assert.equal((await lookup('client@example.com','bad')).status,400);
+  await deliverPending(f.env);
+  assert.match(messages.at(-1).html,new RegExp('/acompanhar/#'+q.token));
+  assert.deepEqual(messages.at(-1).to,['client@example.com']);
+  for(let i=0;i<10;i++)await lookup('unknown@example.com');
+  f.sqlite.prepare("DELETE FROM order_access_limits WHERE key=?").run('quote-'+q.id);
+  await lookup('client@example.com');
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM order_mail').get().n,1);
+  assert.equal((await f.api('/orders/'+ 'f'.repeat(64),'GET',null,false)).status,404);
+});
+
+test('delivery requires Correios tracking; updates, corrections and completion notify and preserve receipts',async t=>{
+  const messages=mockMail(t),f=fixture(),q=await create(f,sample({delivery:'delivery'}));
+  await respond(f,q,messages);
+  const original=f.sqlite.prepare('SELECT document,receipt_hash,response FROM quotes').get();
+  let version=2;
+  async function move(status,trackingCode){const res=await f.api(`/quotes/${q.id}/order`,'PUT',{status,version,trackingCode});if(res.ok)version++;return res;}
+  assert.equal((await move('completed')).status,400);
+  assert.equal((await move('production')).status,200);
+  assert.equal((await move('ready')).status,200);
+  assert.equal((await move('delivered')).status,400);
+  assert.equal((await move('dispatched')).status,400);
+  assert.equal((await move('dispatched','not-a-code')).status,400);
+  assert.equal((await move('dispatched','ab123456789br')).status,200);
+  assert.match(messages.at(-1).text,/AB123456789BR/);
+  assert.match(messages.at(-1).html,/rastreamento.correios.com.br/);
+  assert.equal((await move('dispatched','CD987654321BR')).status,200);
+  assert.match(messages.at(-1).subject,/Rastreio atualizado/);
+  assert.equal((await move('delivered')).status,200);
+  assert.equal((await move('completed')).status,200);
+  assert.match(messages.at(-1).subject,/Pedido concluído/);
+  assert.equal((await move('production')).status,400);
+  const order=(await (await f.api(`/orders/${q.token}`,'GET',null,false)).json()).order;
+  assert.equal(order.status,'completed');assert.ok(order.completedAt);assert.equal(order.trackingCode,'CD987654321BR');
+  assert.equal(order.timeline.length,7);
+  assert.deepEqual(f.sqlite.prepare('SELECT document,receipt_hash,response FROM quotes').get(),original);
+  const dash=await (await f.api('/dashboard')).json();assert.deepEqual(dash.orders,[{status:'completed',count:1}]);
+  const admin=await (await f.api(`/quotes/${q.id}`)).json();assert.equal(admin.notifications.length,6);assert.ok(admin.notifications.every(n=>n.status==='sent'));
+});
+
+test('pickup, cancellation and payment privacy remain consistent for the customer',async t=>{
+  const messages=mockMail(t),f=fixture(),q=await create(f,sample({calculation:{privateCost:15}}));
+  await respond(f,q,messages);
+  assert.equal((await f.api(`/quotes/${q.id}/order`,'PUT',{status:'production',version:2},false)).status,401);
+  for(const [status,version] of [['production',2],['ready',3]])assert.equal((await f.api(`/quotes/${q.id}/order`,'PUT',{status,version})).status,200);
+  assert.match(messages.at(-1).text,/Pronto para retirada/);
+  assert.equal((await f.api(`/quotes/${q.id}/order`,'PUT',{status:'dispatched',version:4,trackingCode:'AB123456789BR'})).status,400);
+  const payment={amount:20,requestKey:'privacy-pay',note:'PRIVATE BANK REFERENCE'};
+  const responses=await Promise.all([f.api(`/quotes/${q.id}/payments`,'POST',payment),f.api(`/quotes/${q.id}/payments`,'POST',payment)]);
+  assert.deepEqual(responses.map(r=>r.status).sort(),[200,201]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM order_mail WHERE json_extract(payload,'$.kind')='payment'").get().n,1);
+  assert.equal(messages.filter(m=>m.subject.startsWith('Pagamento registrado')).length,1);
+  const publicResponse=await (await f.api(`/orders/${q.token}`,'GET',null,false)).text();
+  for(const privateField of ['PRIVATE BANK REFERENCE','privateCost','userAgent','192.0.2.1','admin@example.com','client@example.com'])assert.ok(!publicResponse.includes(privateField),privateField);
+  assert.ok(!messages.at(-1).text.includes('PRIVATE BANK REFERENCE'));
+  assert.equal(JSON.parse(publicResponse).order.paidCents,2000);
+  await f.api(`/quotes/${q.id}/order`,'PUT',{status:'cancelled',version:4});
+  const cancelled=(await (await f.api(`/orders/${q.token}`,'GET',null,false)).json()).order;
+  assert.equal(cancelled.status,'cancelled');assert.equal(cancelled.paidCents,2000);assert.match(messages.at(-1).text,/reembolsos/);
+});
+
+test('outbox snapshots survive Resend failure and conflicting status updates create only one event',async t=>{
+  const messages=mockMail(t),f=fixture(),q=await create(f);await respond(f,q,messages);
+  t.mock.restoreAll();
+  t.mock.method(globalThis,'fetch',async()=>new Response('{}',{status:503}));
+  const statuses=await Promise.all(['production','cancelled'].map(status=>f.api(`/quotes/${q.id}/order`,'PUT',{status,version:2})));
+  assert.deepEqual(statuses.map(r=>r.status).sort(),[200,409]);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM quote_events WHERE event='order'").get().n,1);
+  const pending=f.sqlite.prepare('SELECT * FROM order_mail').get();assert.equal(pending.status,'pending');assert.match(pending.last_error,/503/);
+  // Move ahead while earlier mail is delayed: its snapshot must not change.
+  await f.api(`/quotes/${q.id}/payments`,'POST',{amount:10,requestKey:'delayed-pay'});
+  assert.equal(JSON.parse(f.sqlite.prepare('SELECT payload FROM order_mail WHERE id=?').get(pending.id).payload).paidCents,0);
+  t.mock.restoreAll();const retry=mockMail(t);
+  f.sqlite.exec('UPDATE order_mail SET next_attempt=0');await deliverPending(f.env);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM order_mail WHERE status='pending'").get().n,0);
+  assert.match(retry[0].text,/Recebido: R\$\s*0,00/);
+  assert.match(retry[1].text,/recebimento de R\$\s*10,00/);
+  const before=retry.length;await deliverPending(f.env);assert.equal(retry.length,before);
+});
+
+test('order email escapes text and retains branding, tracking and plain-text access',()=>{
+  const row={number:'ORC-2026-12345678',token:'a'.repeat(64),document:JSON.stringify({delivery:'pickup',deliveryDetails:'<img src=x>'}),response:JSON.stringify({name:'<script>bad</script>'}),total_cents:1000};
+  const email=orderEmail(row,{kind:'order',at:1788700000,status:'ready',trackingCode:'',paidCents:500,details:{}});
+  assert.match(email.html,/&lt;script&gt;/);assert.ok(!email.html.includes('<script>'));assert.match(email.html,/#7c3aed/);assert.match(email.text,/Pronto para retirada/);assert.match(email.text,/acompanhar\/#a{64}/);
+});
+
+test('access link dispatch uses the Worker background context without waiting for the cron',async t=>{
+  const messages=mockMail(t),f=fixture(),q=await create(f);await respond(f,q,messages);
+  const tasks=[];
+  const response=await worker.fetch(new Request('https://api.forgecon.com.br/orders/access',{method:'POST',headers:{'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.2'},body:JSON.stringify({email:'client@example.com',number:q.number})}),f.env,{waitUntil:task=>tasks.push(task)});
+  assert.equal(response.status,202);assert.equal(tasks.length,1);await Promise.all(tasks);
+  assert.match(messages.at(-1).subject,/Acompanhar pedido/);
+  assert.equal(f.sqlite.prepare('SELECT status FROM order_mail').get().status,'sent');
+});
+
+test('additive tracking migration preserves historical records without retroactive email',()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec(readFileSync(new URL('../worker/schema.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../worker/migrations/0001_commercial.sql',import.meta.url),'utf8'));
+  db.exec("INSERT INTO quotes(id,token,request_key,request_hash,number,document,document_hash,total_cents,created_at,expires_at,status,response,receipt_hash,order_status) VALUES('old','token','key','hash','ORC-2026-12345678','{}','immutable',1000,1,2,'accepted','{}','receipt','delivered')");
+  const before=db.prepare('SELECT document,document_hash,response,receipt_hash,order_status FROM quotes').get();
+  db.exec(readFileSync(new URL('../worker/migrations/0002_order_tracking.sql',import.meta.url),'utf8'));
+  assert.deepEqual(db.prepare('SELECT document,document_hash,response,receipt_hash,order_status FROM quotes').get(),before);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM order_mail').get().n,0);
+  assert.equal(db.prepare('SELECT completed_at FROM quotes').get().completed_at,null);db.close();
 });

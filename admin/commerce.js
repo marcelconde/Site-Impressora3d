@@ -1,6 +1,6 @@
 'use strict';
 
-const commerceLabels = {awaiting:'Aguardando',accepted:'Aprovado',declined:'Recusado',changes:'Ajustes solicitados',expired:'Expirado',superseded:'Substituído',pending:'A iniciar',production:'Em produção',ready:'Pronto',dispatched:'Enviado',delivered:'Entregue / retirado',cancelled:'Cancelado'};
+const commerceLabels = {awaiting:'Aguardando',accepted:'Aprovado',declined:'Recusado',changes:'Ajustes solicitados',expired:'Expirado',superseded:'Substituído',pending:'A iniciar',production:'Em produção',ready:'Pronto',dispatched:'Enviado',delivered:'Entregue / retirado',cancelled:'Cancelado',completed:'Pedido concluído'};
 const cash = cents => (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 let savedQuotes = [];
 let categories = [];
@@ -97,17 +97,80 @@ async function loadQuotes() {
     try{const list=[];let offset=0;do{const data=await commerceApi(`/quotes?offset=${offset}`);list.push(...data.quotes);offset=data.nextOffset;}while(offset!==null);savedQuotes=list;renderSavedQuotes();el('quotesMessage').textContent=`${list.length} orçamento(s) salvo(s).`;}catch(e){el('quotesMessage').textContent=e.message;}
 }
 async function openQuote(id) {
-    const data=await commerceApi(`/quotes/${id}`);currentQuote=data.quote;paymentRequest=null;
-    const q=data.quote;const d=q.document;const paid=data.payments.reduce((sum,p)=>sum+p.amount_cents,0);
-    const transitions={pending:['production','cancelled'],production:['ready','cancelled'],ready:d.delivery==='pickup'?['delivered','cancelled']:['dispatched','delivered','cancelled'],dispatched:['delivered'],delivered:[],cancelled:[]};
-    el('quoteDetailBody').innerHTML=`<h2>${esc(q.number)} · ${esc(d.client)}</h2><p class="status-badge ${q.status}">${commerceLabels[q.status]}</p>${d.items.map(item=>`<p><strong>${esc(item.name)}</strong> — ${item.quantity} × ${cash(item.unitCents)} = ${cash(item.totalCents)}<br>${esc(item.description)}</p>`).join('')}<h3>Total ${cash(d.totalCents)}</h3><p>${d.delivery==='pickup'?'Retirada no local — sem frete':'Entrega'} · ${esc(d.deliveryDetails)}</p><p>Pagamento: ${esc(d.payment)}</p><p class="preserve-lines">${esc(d.notes)}</p><div class="commerce-toolbar"><button class="btn btn-primary" data-download-quote>Baixar PDF</button><a class="btn btn-outline" href="${esc(q.link)}" target="_blank" rel="noopener">Página do cliente</a>${['awaiting','changes','declined','expired'].includes(q.status)?'<button class="btn btn-outline" data-revise-quote>Criar revisão</button>':''}</div>${q.response?`<h3>Resposta do cliente</h3><p>${esc(q.response.name)} (${esc(q.response.email)})</p><p>${esc(q.response.message)}</p><p class="hash-text">Hash: ${esc(q.receiptHash)}</p><button class="btn btn-outline" data-retry-mail>Reenviar cópia pendente</button>`:''}${q.status==='accepted'?`<h3>Produção e recebimentos</h3><p>Situação: ${commerceLabels[q.orderStatus]}</p>${transitions[q.orderStatus].length?`<form id="orderStatusForm" class="commerce-toolbar"><label for="orderStatus">Próxima etapa</label><select id="orderStatus">${transitions[q.orderStatus].map(status=>`<option value="${status}">${commerceLabels[status]}</option>`).join('')}</select><button class="btn btn-outline">Atualizar pedido</button></form>`:''}<p>Recebido: ${cash(paid)} · Saldo: ${cash(d.totalCents-paid)}</p>${paid<d.totalCents&&q.orderStatus!=='cancelled'?'<form id="paymentForm" class="commerce-toolbar"><label for="paymentAmount">Valor recebido (R$)</label><input id="paymentAmount" type="number" min="0.01" step="0.01" required><label for="paymentNote">Identificação</label><input id="paymentNote" maxlength="300" placeholder="Ex.: Entrada via Pix"><button class="btn btn-primary">Registrar recebimento</button></form>':''}<ul>${data.payments.map(p=>`<li>${cash(p.amount_cents)} · ${new Date(p.created_at*1000).toLocaleString('pt-BR')} · ${esc(p.note)}</li>`).join('')}</ul>`:''}<h3>Histórico</h3><ul>${data.events.map(event=>{const detail=JSON.parse(event.details);return `<li>${new Date(event.created_at*1000).toLocaleString('pt-BR')} · ${esc(event.event==='published'?'Publicado':event.event==='order'?commerceLabels[detail.status]:commerceLabels[event.event]||event.event)} ${esc(detail.message||'')}</li>`;}).join('')}</ul>`;
-    el('quoteDetailMessage').textContent='';if(!el('quoteDetail').open)el('quoteDetail').showModal();
-    el('orderStatusForm')?.addEventListener('submit',async event=>{event.preventDefault();if(el('orderStatus').value==='cancelled'&&!confirm('Cancelar a produção deste pedido? Os valores já recebidos permanecem no histórico financeiro.'))return;event.submitter.disabled=true;try{await commerceApi(`/quotes/${q.id}/order`,{method:'PUT',body:JSON.stringify({status:el('orderStatus').value,version:q.version})});await openQuote(q.id);await loadQuotes();}catch(e){el('quoteDetailMessage').textContent=e.message;}finally{event.submitter.disabled=false;}});
-    el('paymentForm')?.addEventListener('submit',async event=>{event.preventDefault();const payload={amount:Number(el('paymentAmount').value),note:el('paymentNote').value};const signature=JSON.stringify(payload);if(!paymentRequest||paymentRequest.signature!==signature)paymentRequest={signature,key:crypto.randomUUID()};event.submitter.disabled=true;try{await commerceApi(`/quotes/${q.id}/payments`,{method:'POST',body:JSON.stringify({...payload,requestKey:paymentRequest.key})});await openQuote(q.id);await loadQuotes();}catch(e){el('quoteDetailMessage').textContent=e.message;}finally{event.submitter.disabled=false;}});
+    const data = await commerceApi('/quotes/' + id);
+    currentQuote = data.quote; paymentRequest = null;
+    const q = data.quote, d = q.document;
+    const paid = data.payments.reduce((sum,p) => sum + p.amount_cents,0);
+    const pickup = d.delivery === 'pickup';
+    const labels = {...commerceLabels,ready:pickup?'Pronto para retirada':'Pronto para envio',delivered:pickup?'Retirado pelo cliente':'Entregue'};
+    const transitions = {pending:['production','cancelled'],production:['ready','cancelled'],ready:pickup?['delivered','cancelled']:['dispatched','cancelled'],dispatched:['delivered'],delivered:['completed'],completed:[],cancelled:[]};
+    const next = transitions[q.orderStatus] || [];
+    const pending = (data.notifications || []).filter(n => n.status === 'pending').length;
+    const sent = (data.notifications || []).filter(n => n.status === 'sent').length;
+    const trackingField = id => '<label for="'+id+'">Código de rastreio dos Correios</label><input id="'+id+'" value="'+esc(q.trackingCode || '')+'" maxlength="13" pattern="[A-Za-z]{2}[0-9]{9}[Bb][Rr]" placeholder="AB123456789BR" title="2 letras, 9 números e BR" required><small>Use o código da postagem PAC ou SEDEX.</small>';
+    el('quoteDetailBody').innerHTML = [
+        '<h2>'+esc(q.number)+' · '+esc(d.client)+'</h2><p class="status-badge '+q.status+'">'+labels[q.status]+'</p>',
+        ...d.items.map(item=>'<p><strong>'+esc(item.name)+'</strong> — '+item.quantity+' × '+cash(item.unitCents)+' = '+cash(item.totalCents)+'<br>'+esc(item.description)+'</p>'),
+        '<h3>Total '+cash(d.totalCents)+'</h3><p>'+(pickup?'Retirada no local — sem frete':'Entrega')+' · '+esc(d.deliveryDetails)+'</p><p>Pagamento: '+esc(d.payment)+'</p><p class="preserve-lines">'+esc(d.notes)+'</p>',
+        '<div class="commerce-toolbar"><button class="btn btn-primary" data-download-quote>Baixar PDF</button><a class="btn btn-outline" href="'+esc(q.link)+'" target="_blank" rel="noopener noreferrer">Página do cliente</a>',
+        q.status==='accepted'?'<a class="btn btn-outline" href="'+esc(q.orderLink)+'" target="_blank" rel="noopener noreferrer">Acompanhar pedido</a>':'',
+        ['awaiting','changes','declined','expired'].includes(q.status)?'<button class="btn btn-outline" data-revise-quote>Criar revisão</button>':'',
+        '</div>',
+        q.response?'<h3>Resposta do cliente</h3><p>'+esc(q.response.name)+' ('+esc(q.response.email)+')</p><p>'+esc(q.response.message)+'</p><p class="hash-text">Hash: '+esc(q.receiptHash)+'</p><button class="btn btn-outline" data-retry-mail>Reenviar e-mails pendentes</button>':'',
+        q.status==='accepted'?[
+            '<h3>Produção e recebimentos</h3><p>Situação: <strong>'+labels[q.orderStatus]+'</strong></p>',
+            '<p>Atualizações enviadas para '+esc(q.response.email)+'. '+sent+' envio(s) confirmado(s) pelo serviço.'+(pending?' <strong class="commerce-warning">'+pending+' envio(s) pendente(s); nova tentativa automática.</strong>':'')+'</p>',
+            next.length?'<form id="orderStatusForm"><div class="commerce-toolbar"><label for="orderStatus">Próxima etapa</label><select id="orderStatus">'+next.map(status=>'<option value="'+status+'">'+labels[status]+'</option>').join('')+'</select></div><div id="dispatchFields" hidden>'+trackingField('orderTrackingCode')+'</div><button class="btn btn-outline">Atualizar pedido e avisar cliente</button></form>':'',
+            q.trackingCode?'<p>Rastreio atual: <strong>'+esc(q.trackingCode)+'</strong> · <a href="https://rastreamento.correios.com.br/app/index.php" target="_blank" rel="noopener noreferrer">Consultar nos Correios</a></p>':'',
+            !pickup&&['dispatched','delivered','completed'].includes(q.orderStatus)?'<details><summary>Corrigir código de rastreio</summary><form id="trackingForm">'+trackingField('correctTrackingCode')+'<button class="btn btn-outline">Salvar rastreio e avisar cliente</button></form></details>':'',
+            '<p>Recebido: '+cash(paid)+' · Saldo: '+cash(d.totalCents-paid)+'</p>',
+            paid<d.totalCents&&q.orderStatus!=='cancelled'?'<form id="paymentForm" class="commerce-toolbar"><label for="paymentAmount">Valor recebido (R$)</label><input id="paymentAmount" type="number" min="0.01" max="'+((d.totalCents-paid)/100)+'" step="0.01" required><label for="paymentNote">Identificação interna (não enviada ao cliente)</label><input id="paymentNote" maxlength="300" placeholder="Ex.: Entrada via Pix"><button class="btn btn-primary">Registrar recebimento</button></form>':'',
+            '<ul>'+data.payments.map(p=>'<li>'+cash(p.amount_cents)+' · '+new Date(p.created_at*1000).toLocaleString('pt-BR')+' · '+esc(p.note)+'</li>').join('')+'</ul>',
+        ].join(''):'',
+        '<h3>Histórico</h3><ul>'+data.events.map(event=>{
+            const detail=JSON.parse(event.details);
+            const label=event.event==='published'?'Publicado':event.event==='payment'?'Pagamento registrado: '+cash(detail.amountCents):event.event==='order'?(detail.trackingChanged?'Rastreio atualizado':labels[detail.status]):labels[event.event]||event.event;
+            return '<li>'+new Date(event.created_at*1000).toLocaleString('pt-BR')+' · '+esc(label)+' '+esc(detail.trackingCode||detail.message||'')+'</li>';
+        }).join('')+'</ul>',
+    ].join('');
+    el('quoteDetailMessage').textContent='';
+    if(!el('quoteDetail').open) el('quoteDetail').showModal();
+    const showTracking=()=>{
+        const show=el('orderStatus').value==='dispatched';
+        el('dispatchFields').hidden=!show;
+        el('orderTrackingCode').disabled=!show;
+    };
+    if(el('orderStatus')){el('orderStatus').onchange=showTracking;showTracking();}
+    async function save(event,path,payload) {
+        event.submitter.disabled=true;
+        try {
+            await commerceApi('/quotes/'+q.id+path,{method:path==='/payments'?'POST':'PUT',body:JSON.stringify(payload)});
+            await openQuote(q.id); await loadQuotes();
+            el('quoteDetailMessage').textContent='Atualização salva. Confira a situação dos e-mails acima.';
+        } catch(e) {el('quoteDetailMessage').textContent=e.message;}
+        finally {event.submitter.disabled=false;}
+    }
+    el('orderStatusForm')?.addEventListener('submit',event=>{
+        event.preventDefault();
+        const status=el('orderStatus').value;
+        if(status==='cancelled'&&!confirm('Cancelar a produção e avisar o cliente por e-mail? Os pagamentos permanecem no histórico.'))return;
+        save(event,'/order',{status,version:q.version,...(status==='dispatched'?{trackingCode:el('orderTrackingCode').value}:{})});
+    });
+    el('trackingForm')?.addEventListener('submit',event=>{
+        event.preventDefault();
+        save(event,'/order',{status:q.orderStatus,version:q.version,trackingCode:el('correctTrackingCode').value});
+    });
+    el('paymentForm')?.addEventListener('submit',event=>{
+        event.preventDefault();
+        const payload={amount:Number(el('paymentAmount').value),note:el('paymentNote').value};
+        const signature=JSON.stringify(payload);
+        if(!paymentRequest||paymentRequest.signature!==signature)paymentRequest={signature,key:crypto.randomUUID()};
+        save(event,'/payments',{...payload,requestKey:paymentRequest.key});
+    });
 }
 el('closeQuoteDetail').onclick=()=>el('quoteDetail').close();
 el('savedQuotes').addEventListener('click',async event=>{const button=event.target.closest('[data-open-quote]');if(!button)return;button.disabled=true;try{await openQuote(button.dataset.openQuote);}catch(e){el('quotesMessage').textContent=e.message;}finally{button.disabled=false;}});
-el('quoteDetailBody').addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;try{if(button.hasAttribute('data-download-quote'))await downloadQuote(currentQuote.token,currentQuote.number);if(button.hasAttribute('data-retry-mail')){button.disabled=true;const r=await commerceApi(`/quotes/${currentQuote.id}/retry-email`,{method:'POST'});el('quoteDetailMessage').textContent=r.mail?.status==='sent'?'Cópia enviada.':r.mail?.last_error||'Envio pendente.';}if(button.hasAttribute('data-revise-quote'))startRevision(currentQuote);}catch(e){el('quoteDetailMessage').textContent=e.message;}finally{button.disabled=false;}});
+el('quoteDetailBody').addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;try{if(button.hasAttribute('data-download-quote'))await downloadQuote(currentQuote.token,currentQuote.number);if(button.hasAttribute('data-retry-mail')){button.disabled=true;const r=await commerceApi(`/quotes/${currentQuote.id}/retry-email`,{method:'POST'});await openQuote(currentQuote.id);el('quoteDetailMessage').textContent=r.mail?.status==='sent'&&!r.pendingUpdates?'E-mails enviados.':'Há envios pendentes. Nova tentativa automática; confira o serviço de e-mail se persistir.';}if(button.hasAttribute('data-revise-quote'))startRevision(currentQuote);}catch(e){el('quoteDetailMessage').textContent=e.message;}finally{button.disabled=false;}});
 function startRevision(q) {
     el('quoteDetail').close();revisionId=q.id;publication=null;
     for(const [id,value] of Object.entries(q.calculation)){const input=el(id);if(input&&/^c[A-Z]/.test(id))input.value=String(value);}

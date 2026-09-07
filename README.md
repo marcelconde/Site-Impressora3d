@@ -70,7 +70,7 @@ O PDF comporta múltiplas páginas e não corta itens ou observações para cabe
 - Saldo a receber: total dos pedidos aprovados e ativos menos seus recebimentos.
 - Ticket médio: valor aprovado dividido pela quantidade de orçamentos aprovados.
 - Orçamentos: agrupados pela data de emissão e situação da proposta.
-- Produção: a iniciar, em produção, pronto, enviado, entregue/retirado ou cancelado.
+- Produção: a iniciar, em produção, pronto, enviado, entregue/retirado, concluído ou cancelado.
 
 Pagamentos parciais são registros independentes e não podem exceder o saldo.
 Cancelar a produção não apaga nem estorna recebimentos. Esta versão não efetua
@@ -80,6 +80,43 @@ recebimento é a data em que o administrador o registra.
 Pedidos iniciados por WhatsApp precisam ser cadastrados como orçamento no painel
 para aparecer nos indicadores. O formulário público abre a mensagem preenchida;
 o cliente precisa enviá-la no WhatsApp para que o atendimento a receba.
+
+## Acompanhamento do cliente
+
+O menu “Acompanhar pedido” abre `/acompanhar/`. O cliente informa o número completo
+do orçamento (`ORC-AAAA-XXXXXXXX`) e o e-mail confirmado no aceite. O Resend envia
+um link privado, sem cadastro ou senha. A resposta do formulário não revela se os
+dados existem. Há limite de dez solicitações por IP em quinze minutos e intervalo
+de dois minutos por pedido. O IP fica armazenado somente como hash, por esse prazo.
+
+O link usa o mesmo token secreto do orçamento e tem o mesmo caráter de acesso
+privado: quem possui o link pode consultar o pedido e o documento. Não expira
+automaticamente; não deve ser compartilhado publicamente. A consulta inclui etapas,
+itens, pagamentos, saldo, recebimento e rastreio, mas não notas financeiras internas,
+cálculos de custo, identidade do administrador ou dados técnicos do aceite.
+
+No painel, marque produção, pronto para retirada/envio, entregue/retirado e
+“Pedido concluído”. Para entrega, a etapa “Enviado” exige o código dos Correios
+(duas letras, nove números e BR). O código pode ser corrigido depois da postagem.
+Retirada não aceita rastreio. A conclusão é um marco posterior à entrega, não uma
+confirmação automática de pagamento. No banco, `completed_at` distingue esse marco
+sem modificar o documento nem reconstruir as tabelas anteriores.
+
+Cada mudança de etapa/rastreio e cada recebimento gera um evento e uma notificação
+na mesma transação. Os e-mails mantêm a identidade visual Forgecon e o retrato dos
+dados no momento do evento, mesmo se enviados com atraso. Falhas ficam na fila
+`order_mail`; o painel mostra pendências e permite repetir o envio. O agendamento
+de dez minutos também processa essa fila. Registros anteriores à migração não
+geram notificações retroativas. A confirmação do Resend indica aceitação pelo
+serviço, não comprovação de leitura ou entrega na caixa de entrada.
+
+O cliente consulta as informações mais recentes ao abrir a página ou clicar em
+“Atualizar acompanhamento”. O código e o link oficial dos Correios aparecem no
+site e no e-mail; não há sincronização automática dos eventos da transportadora.
+Pedidos do WhatsApp entram nesse fluxo após cadastro e aprovação do orçamento.
+
+No rollback, mantenha também as colunas, filas e gatilhos da migração
+`0002_order_tracking.sql`; não exclua históricos ou notificações pendentes.
 
 ## Categorias e retirada
 

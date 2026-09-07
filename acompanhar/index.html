@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+  <title>Acompanhar pedido — Forgecon</title><link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/proposta/proposta.css"><link rel="stylesheet" href="acompanhar.css">
+</head>
+<body>
+  <header><a href="/" aria-label="Forgecon — início">FORGE<span>CON</span></a><a class="back" href="/produtos/">Voltar à loja</a></header>
+  <main>
+    <p class="eyebrow">DA IDEIA À PEÇA. CAMADA POR CAMADA.</p>
+    <h1>Acompanhe seu pedido</h1>
+    <p class="intro">Seu projeto ganha forma. Veja cada etapa por aqui.</p>
+    <section id="accessSection">
+      <h2>Entre sem precisar de senha</h2>
+      <p>Informe o e-mail confirmado na aprovação e o número do orçamento. Enviaremos um link privado para acompanhar seu pedido.</p>
+      <form id="accessForm">
+        <label for="email">Seu e-mail</label><input id="email" type="email" autocomplete="email" maxlength="254" placeholder="voce@exemplo.com" required>
+        <label for="number">Número do pedido / orçamento</label><input id="number" autocapitalize="characters" spellcheck="false" maxlength="17" pattern="[Oo][Rr][Cc]-[0-9]{4}-[A-Fa-f0-9]{8}" placeholder="ORC-2026-XXXXXXXX" required>
+        <p class="privacy">Você encontra esse número no PDF ou no e-mail de aprovação. Pedidos combinados pelo WhatsApp precisam ser cadastrados e aprovados no orçamento da Forgecon.</p>
+        <button class="primary" id="sendAccess">Receber link por e-mail</button>
+        <p id="accessMessage" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+    <p id="pageMessage" role="status" aria-live="polite"></p>
+    <div id="orderPanel" hidden></div>
+    <div id="orderActions" hidden><button id="refresh" class="primary">Atualizar acompanhamento</button><button id="leave">Consultar outro pedido</button><p class="privacy">Este link é privado. Compartilhe apenas com pessoas autorizadas. As etapas são atualizadas pela Forgecon; o rastreio detalhado fica no site dos Correios.</p></div>
+    <footer>FORGECON · Impressão 3D profissional<br><a href="/sobre/">Fale com a Forgecon</a></footer>
+  </main>
+  <script src="acompanhar.js"></script>
+</body>
+</html>

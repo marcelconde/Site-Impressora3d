@@ -2170,7 +2170,7 @@ select option { background: var(--bg3); color: var(--text); }
     .footer-grid { grid-template-columns: 1fr 1fr; gap: 40px; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
     .nav-links, .nav-actions .nav-socials { display: none; }
     .nav-container { gap: 12px; padding: 0 16px; }
     .nav-logo { margin-right: auto; min-width: 0; }
@@ -2191,7 +2191,9 @@ select option { background: var(--bg3); color: var(--text); }
         z-index: 999;
     }
     .nav-links.mobile-open .nav-link { padding: 14px 16px; font-size: 1rem; border-radius: var(--r-md); }
+}
 
+@media (max-width: 900px) {
     .hero-layout { grid-template-columns: 1fr; padding-top: 60px; }
     .hero-visual { display: none; }
     .hero-stats { flex-wrap: wrap; }

@@ -1,5 +1,7 @@
 import { quotePdf, quoteLink } from './quote-pdf.js';
 import { quoteReceiptEmail, quoteCodeEmail } from './quote-emails.js';
+import { email } from './email.js';
+import { orderStatus, orderLink, orderView, requestOrderAccess, deliverOrderPending, deliverOrderMail } from './orders.js';
 
 const now = () => Math.floor(Date.now() / 1000);
 const random = () => crypto.randomUUID();
@@ -46,19 +48,10 @@ function view(row, admin = false) {
     id: row.id, number: row.number, document: JSON.parse(row.document), documentHash: row.document_hash,
     status, createdAt: row.created_at, expiresAt: row.expires_at,
     response: row.response ? JSON.parse(row.response) : null, receiptHash: row.receipt_hash,
-    orderStatus: row.order_status, version: row.version,
+    orderStatus: orderStatus(row), trackingCode: row.tracking_code, completedAt: row.completed_at, version: row.version,
   };
-  if (admin) Object.assign(result, { link: quoteLink(row.token), token: row.token, calculation: JSON.parse(row.calculation), previousId: row.previous_id });
+  if (admin) Object.assign(result, { link: quoteLink(row.token), orderLink: orderLink(row.token), token: row.token, calculation: JSON.parse(row.calculation), previousId: row.previous_id });
   return result;
-}
-
-async function email(env, to, message, key, attachments) {
-  if (!env.RESEND_API_KEY) throw new Error('Serviço de e-mail não configurado.');
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': key },
-    body: JSON.stringify({ from: 'Forgecon <noreply@forgecon.com.br>', to: [to], ...message, ...(attachments ? { attachments } : {}) }),
-  });
-  if (!res.ok) throw new Error(`Falha no envio de e-mail (${res.status}).`);
 }
 
 export async function deliverReceipt(env, id) {
@@ -81,6 +74,7 @@ export async function deliverReceipt(env, id) {
 export async function deliverPending(env) {
   const { results } = await env.DB.prepare("SELECT quote_id FROM quote_mail WHERE status = 'pending' AND next_attempt <= ? AND lease_until <= ? LIMIT 10").bind(now(),now()).all();
   for (const row of results) await deliverReceipt(env,row.quote_id);
+  await deliverOrderPending(env);
 }
 
 export async function handleCommercial(request, env, helpers) {
@@ -88,7 +82,7 @@ export async function handleCommercial(request, env, helpers) {
   const origin = request.headers.get('Origin') || '';
   const url = new URL(request.url);
   const path = url.pathname;
-  if (!/^\/(categories|quotes|dashboard)(\/|$)/.test(path)) return null;
+  if (!/^\/(categories|quotes|dashboard|orders)(\/|$)/.test(path)) return null;
   const reply = (value, status = 200) => {
     const res = json(value, status, origin);
     res.headers.set('Cache-Control','no-store'); res.headers.set('Referrer-Policy','no-referrer'); return res;
@@ -99,6 +93,17 @@ export async function handleCommercial(request, env, helpers) {
     try { const data = JSON.parse(source); if (!data || typeof data !== 'object' || Array.isArray(data)) fail('Dados inválidos.'); return data; } catch { fail('JSON inválido.'); }
   };
   try {
+    if (path === '/orders/access' && request.method === 'POST') {
+      const mailId = await requestOrderAccess(env,await body(),await digest(request.headers.get('CF-Connecting-IP') || 'unknown'));
+      if (mailId && helpers.waitUntil) helpers.waitUntil(deliverOrderMail(env,mailId));
+      return reply({message:'Se os dados corresponderem a um pedido aprovado, enviaremos um link privado ao e-mail cadastrado. Confira também o spam.'},202);
+    }
+    const orderMatch = path.match(/^\/orders\/([a-f0-9]{64})$/);
+    if (orderMatch && request.method === 'GET') {
+      const row = await env.DB.prepare("SELECT * FROM quotes WHERE token=? AND status='accepted'").bind(orderMatch[1]).first();
+      if (!row) fail('Pedido não encontrado. Solicite um novo link com seu e-mail e número do pedido.',404);
+      return reply({order:await orderView(env,row)});
+    }
     if (path === '/categories' && request.method === 'GET') {
       const { results } = await env.DB.prepare('SELECT id, name FROM categories ORDER BY name COLLATE NOCASE').all();
       return reply({ categories: results });
@@ -226,24 +231,37 @@ export async function handleCommercial(request, env, helpers) {
       if (!action && request.method === 'GET') {
         const {results:events} = await env.DB.prepare('SELECT * FROM quote_events WHERE quote_id = ? ORDER BY id').bind(id).all();
         const {results:payments} = await env.DB.prepare('SELECT * FROM quote_payments WHERE quote_id = ? ORDER BY created_at').bind(id).all();
-        return reply({quote:view(row,true),events,payments});
+        const {results:notifications} = await env.DB.prepare("SELECT id,status,last_error AS error,sent_at AS sentAt FROM order_mail WHERE quote_id=? AND json_extract(payload,'$.kind')!='access' ORDER BY rowid DESC").bind(id).all();
+        return reply({quote:view(row,true),events,payments,notifications});
       }
       if (action === 'retry-email' && request.method === 'POST') {
         await deliverReceipt(env,id);
-        return reply({mail:await env.DB.prepare('SELECT status,last_error FROM quote_mail WHERE quote_id = ?').bind(id).first()});
+        await deliverOrderPending(env,id);
+        const pending = await env.DB.prepare("SELECT COUNT(*) AS count FROM order_mail WHERE quote_id=? AND status='pending'").bind(id).first();
+        return reply({mail:await env.DB.prepare('SELECT status,last_error FROM quote_mail WHERE quote_id = ?').bind(id).first(),pendingUpdates:pending.count});
       }
       if (action === 'order' && request.method === 'PUT') {
         const input = await body();
         if (!Number.isInteger(input.version) || input.version < 1) fail('Versão do pedido inválida.');
         if (row.version !== input.version) fail('Pedido atualizado por outra pessoa. Recarregue.',409);
-        const transitions = {pending:['production','cancelled'],production:['ready','cancelled'],ready:['dispatched','delivered','cancelled'],dispatched:['delivered'],delivered:[],cancelled:[]};
-        if (!transitions[row.order_status]?.includes(input.status)) fail('Mudança de produção inválida.');
-        if (JSON.parse(row.document).delivery === 'pickup' && input.status === 'dispatched') fail('Pedido de retirada deve ser marcado como entregue ao cliente.');
+        const pickup = JSON.parse(row.document).delivery === 'pickup';
+        const transitions = {pending:['production','cancelled'],production:['ready','cancelled'],ready:pickup?['delivered','cancelled']:['dispatched','cancelled'],dispatched:['delivered'],delivered:['completed'],completed:[],cancelled:[]};
+        const current = orderStatus(row);
+        if (input.trackingCode !== undefined && typeof input.trackingCode !== 'string') fail('Código de rastreio inválido.');
+        const tracking = typeof input.trackingCode === 'string' ? input.trackingCode.trim().toUpperCase() : row.tracking_code;
+        const trackingChanged = tracking !== row.tracking_code;
+        const correction = input.status === current && ['dispatched','delivered','completed'].includes(current) && trackingChanged;
+        if (!transitions[current]?.includes(input.status) && !correction) fail('Mudança de produção inválida.');
+        if (pickup && tracking) fail('Pedido de retirada não possui rastreio dos Correios.');
+        if ((!pickup && input.status === 'dispatched' || tracking) && !/^[A-Z]{2}\d{9}BR$/.test(tracking)) fail('Informe o código dos Correios com 2 letras, 9 números e BR (ex.: AB123456789BR).');
+        if (trackingChanged && !correction && input.status !== 'dispatched') fail('Informe o rastreio ao marcar o pedido como enviado.');
+        const storedStatus = input.status === 'completed' ? 'delivered' : input.status;
         const batch = await env.DB.batch([
-          env.DB.prepare("UPDATE quotes SET order_status = ?, version=version+1 WHERE id=? AND version=? AND status='accepted'").bind(input.status,id,input.version),
-          env.DB.prepare('INSERT OR IGNORE INTO quote_events (quote_id,event,details,user_id) SELECT id,?,?,? FROM quotes WHERE id=? AND version=? AND order_status=?').bind('order',JSON.stringify({status:input.status,version:input.version+1}),user.id,id,input.version+1,input.status),
+          env.DB.prepare("UPDATE quotes SET order_status=?,tracking_code=?,completed_at=?,version=version+1 WHERE id=? AND version=? AND status='accepted'").bind(storedStatus,tracking,input.status==='completed'?(row.completed_at || now()):row.completed_at,id,input.version),
+          env.DB.prepare('INSERT INTO quote_events (quote_id,event,details,user_id) SELECT id,?,?,? FROM quotes WHERE id=? AND version=? AND changes()>0').bind('order',JSON.stringify({status:input.status,version:input.version+1,trackingCode:tracking,trackingChanged:correction}),user.id,id,input.version+1),
         ]);
         if (!batch[0].meta.changes) fail('Pedido atualizado por outra pessoa ou ainda não aprovado. Recarregue.',409);
+        await deliverOrderPending(env,id);
         return reply({ok:true});
       }
       if (action === 'payments' && request.method === 'POST') {
@@ -259,6 +277,7 @@ export async function handleCommercial(request, env, helpers) {
           if(retry?.quote_id===id && retry.amount_cents===amount) return reply({ok:true});
           fail('Valor excede o saldo ou pedido não está aprovado/ativo.',409);
         }
+        await deliverOrderPending(env,id);
         return reply({ok:true},201);
       }
     }
@@ -271,7 +290,7 @@ export async function handleCommercial(request, env, helpers) {
       const {results:quotes} = await env.DB.prepare(`SELECT CASE WHEN status='awaiting' AND expires_at <= ? THEN 'expired' ELSE status END AS status, COUNT(*) AS count, SUM(total_cents) AS cents FROM quotes WHERE created_at >= ? AND created_at < ? GROUP BY 1`).bind(now(),from,until).all();
       const approved = await env.DB.prepare("SELECT COUNT(*) AS count,COALESCE(SUM(total_cents),0) AS cents FROM quotes WHERE status='accepted' AND order_status!='cancelled' AND responded_at>=? AND responded_at<?").bind(from,until).first();
       const received = await env.DB.prepare('SELECT COALESCE(SUM(amount_cents),0) AS cents FROM quote_payments WHERE created_at>=? AND created_at<?').bind(from,until).first();
-      const {results:orders} = await env.DB.prepare("SELECT order_status AS status,COUNT(*) AS count FROM quotes WHERE status='accepted' AND responded_at>=? AND responded_at<? GROUP BY order_status").bind(from,until).all();
+      const {results:orders} = await env.DB.prepare("SELECT CASE WHEN completed_at IS NOT NULL THEN 'completed' ELSE order_status END AS status,COUNT(*) AS count FROM quotes WHERE status='accepted' AND responded_at>=? AND responded_at<? GROUP BY 1").bind(from,until).all();
       const {results:monthly} = await env.DB.prepare("SELECT strftime('%Y-%m',created_at-10800,'unixepoch') AS month,SUM(amount_cents) AS cents FROM quote_payments WHERE created_at>=? AND created_at<? GROUP BY 1 ORDER BY 1").bind(from,until).all();
       const balance = await env.DB.prepare("SELECT COALESCE(SUM(total_cents - COALESCE((SELECT SUM(amount_cents) FROM quote_payments WHERE quote_id=quotes.id),0)),0) AS cents FROM quotes WHERE status='accepted' AND order_status!='cancelled'").first();
       return reply({quotes,approved,received,orders,monthly,balance});

@@ -481,9 +481,9 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(deliverPending(env));
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
-      return await handleRequest(request, env);
+      return await handleRequest(request, env, ctx);
     } catch (e) {
       const origin = request.headers.get('Origin') || '';
       return new Response(JSON.stringify({ error: 'Worker exception', detail: e.message, stack: e.stack }), {
@@ -494,7 +494,7 @@ export default {
   },
 };
 
-async function handleRequest(request, env) {
+async function handleRequest(request, env, ctx) {
   const origin = request.headers.get('Origin') || '';
   const url = new URL(request.url);
   const path = url.pathname;
@@ -503,7 +503,7 @@ async function handleRequest(request, env) {
     return new Response(null, { status: 204, headers: cors(origin) });
   }
 
-  const commercial = await handleCommercial(request, env, { json, err, cors, getSessionUser, tokenFromRequest });
+  const commercial = await handleCommercial(request, env, { json, err, cors, getSessionUser, tokenFromRequest, waitUntil:ctx ? promise => ctx.waitUntil(promise) : undefined });
   if (commercial) return commercial;
 
   if (path === '/' || path === '/health') {
