@@ -1,8 +1,8 @@
-import { quotePdf, quoteLink, money } from './quote-pdf.js';
+import { quotePdf, quoteLink } from './quote-pdf.js';
+import { quoteReceiptEmail, quoteCodeEmail } from './quote-emails.js';
 
 const now = () => Math.floor(Date.now() / 1000);
 const random = () => crypto.randomUUID();
-const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const emailValid = email => typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 export async function digest(text) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map(b => b.toString(16).padStart(2,'0')).join('');
@@ -52,11 +52,11 @@ function view(row, admin = false) {
   return result;
 }
 
-async function email(env, to, subject, html, key, attachments) {
+async function email(env, to, message, key, attachments) {
   if (!env.RESEND_API_KEY) throw new Error('Serviço de e-mail não configurado.');
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': key },
-    body: JSON.stringify({ from: 'Forgecon <noreply@forgecon.com.br>', to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
+    body: JSON.stringify({ from: 'Forgecon <noreply@forgecon.com.br>', to: [to], ...message, ...(attachments ? { attachments } : {}) }),
   });
   if (!res.ok) throw new Error(`Falha no envio de e-mail (${res.status}).`);
 }
@@ -67,12 +67,10 @@ export async function deliverReceipt(env, id) {
   try {
     const row = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first();
     const response = JSON.parse(row.response);
-    const document = JSON.parse(row.document);
     const pdf = await quotePdf(row);
     let binary = '';
     for (const byte of pdf) binary += String.fromCharCode(byte);
-    await email(env, response.email, `Cópia do orçamento ${row.number} — Forgecon`,
-      `<h1>Resposta registrada</h1><p>Olá, ${safe(response.name)}. Sua resposta ao orçamento ${safe(row.number)} foi registrada.</p><p>Total: ${money(document.totalCents)}. Situação: ${safe(response.action === 'accepted' ? 'Aprovado' : response.action === 'declined' ? 'Recusado' : 'Ajustes solicitados')}.</p><p>A cópia completa está anexada.</p><p>Código: ${safe(response.code)}</p><p>Hash de integridade: ${row.receipt_hash}</p><p><a href="${quoteLink(row.token)}">Consultar documento e comprovante</a></p>`,
+    await email(env, response.email, quoteReceiptEmail(row),
       `quote-receipt-${id}`, [{ filename: `${row.number}.pdf`, content: btoa(binary) }]);
     await env.DB.prepare("UPDATE quote_mail SET status = 'sent', sent_at = ?, lease_until = 0, last_error = NULL WHERE quote_id = ?").bind(now(), id).run();
   } catch (e) {
@@ -133,7 +131,7 @@ export async function handleCommercial(request, env, helpers) {
           ON CONFLICT(quote_id) DO UPDATE SET email=excluded.email,code_hash=excluded.code_hash,expires_at=excluded.expires_at,sent_at=excluded.sent_at,attempts=0
           WHERE quote_email_challenges.sent_at <= ? RETURNING quote_id`).bind(row.id,address,codeHash,now()+600,now(),now()-120).first();
         if (!changed) fail('Aguarde dois minutos antes de solicitar outro código.',429);
-        try { await email(env,address,`Código para responder ao orçamento ${row.number}`,`<p>Seu código é <strong>${code}</strong>. Expira em 10 minutos.</p><p>Use-o apenas na página do orçamento ${row.number}. Se não solicitou, ignore.</p>`,`quote-code-${random()}`); }
+        try { await email(env,address,quoteCodeEmail(row,code),`quote-code-${random()}`); }
         catch { fail('Não foi possível enviar o código. Tente novamente em dois minutos.',503); }
         return reply({ ok: true });
       }
